@@ -24,6 +24,7 @@ fn background_refresh_survives_status_command_group_cleanup() {
     .unwrap();
     // Herdr 0.9.5 kills the status command's process group even on success.
     let mut child = Command::new("/bin/sh")
+        .env("CODEX_HOME", f.dir.join("codex-home"))
         .args([
             "-c",
             "\"$1\" status --cache-dir \"$2\" --codex \"$3\"; sleep 30",
@@ -135,6 +136,7 @@ done
 
     fn run(&self, command: &str) -> Output {
         let output = Command::new(env!("CARGO_BIN_EXE_herdr-quota"))
+            .env("CODEX_HOME", self.dir.join("codex-home"))
             .arg(command)
             .arg("--cache-dir")
             .arg(self.dir.join("cache"))
@@ -238,6 +240,7 @@ fn concurrent_refresh_has_single_owner() {
     for _ in 0..4 {
         children.push(
             Command::new(env!("CARGO_BIN_EXE_herdr-quota"))
+                .env("CODEX_HOME", f.dir.join("codex-home"))
                 .arg("refresh")
                 .arg("--cache-dir")
                 .arg(f.dir.join("cache"))
@@ -264,6 +267,7 @@ fn generated_command_handles_shell_metacharacters_in_paths() {
     fs::create_dir(&odd_path).unwrap();
     fs::copy(f.dir.join("cache/quota.json"), odd_path.join("quota.json")).unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_herdr-quota"))
+        .env("CODEX_HOME", f.dir.join("codex-home"))
         .arg("herdr-config")
         .arg("--cache-dir")
         .arg(&odd_path)
@@ -280,6 +284,7 @@ fn generated_command_handles_shell_metacharacters_in_paths() {
     let encoded = encoded.split(", interval_seconds").next().unwrap();
     let command: String = serde_json::from_str(encoded).unwrap();
     let status = Command::new("/bin/sh")
+        .env("CODEX_HOME", f.dir.join("codex-home"))
         .arg("-c")
         .arg(command)
         .current_dir(&f.dir)

@@ -1,5 +1,6 @@
 mod cache;
 mod codex;
+mod http_quota;
 mod management;
 mod model;
 
@@ -100,6 +101,19 @@ fn refresh(options: &Options) -> std::io::Result<()> {
     current.attempted_at = started;
     // Publish the attempt before any network access, to rate-limit failures.
     cache::write(&options.cache_dir, &current)?;
+    if let Ok((identity, quota)) = http_quota::read(&options.codex) {
+        return cache::write(
+            &options.cache_dir,
+            &Cache {
+                attempted_at: started,
+                fetched_at: Some(now()),
+                identity: Some(identity),
+                quota: Some(quota),
+                state: State::Ready,
+            },
+        );
+    }
+    // Codex owns refresh-token recovery and unsupported credential stores.
     let Ok(mut client) = Codex::start(&options.codex) else {
         // Without a verified account, retaining old quota risks misattribution.
         return cache::write(
@@ -182,7 +196,7 @@ fn herdr_config(options: &Options) -> std::io::Result<()> {
         quote(options.codex.as_os_str())?
     );
     println!(
-        "[ui]\nhide_tab_bar_when_single_tab = false\ntab_bar_position = \"top\"\ntab_bar_right = [\n  {{ type = \"command\", command = {}, interval_seconds = 5, timeout_seconds = 2 }},\n]",
+        "[ui]\nhide_tab_bar_when_single_tab = false\ntab_bar_position = \"top\"\ntab_bar_right = [\n  {{ type = \"command\", command = {}, interval_seconds = 30, timeout_seconds = 2 }},\n]",
         serde_json::to_string(&command)?
     );
     Ok(())
@@ -224,7 +238,7 @@ fn main() {
             println!("{}", cache::read(&options.cache_dir).render(now()));
         }
         "--help" | "-h" | "help" => println!(
-            "herdr-quota [status|refresh|herdr-config|install|configure|uninstall] [--cache-dir ABSOLUTE_PATH] [--codex EXECUTABLE]\n\ninstall       Install to ~/.local/bin, merge Herdr config and reload.\nconfigure     Merge Herdr config and reload using this executable.\nuninstall     Remove managed Herdr status, reload, then remove installed program.\nManagement options: --config ABSOLUTE_PATH --install-dir ABSOLUTE_PATH --herdr EXECUTABLE\n\nstatus        Print cached quota immediately; refresh in the background if due.\nrefresh       Perform a due refresh in the foreground (30s session budget).\nherdr-config  Print a Herdr [ui] configuration snippet; does not change files."
+            "herdr-quota [status|refresh|herdr-config|install|configure|uninstall] [--cache-dir ABSOLUTE_PATH] [--codex EXECUTABLE]\n\ninstall       Install to ~/.local/bin, merge Herdr config and reload.\nconfigure     Merge Herdr config and reload using this executable.\nuninstall     Remove managed Herdr status, reload, then remove installed program.\nManagement options: --config ABSOLUTE_PATH --install-dir ABSOLUTE_PATH --herdr EXECUTABLE\n\nstatus        Print cached quota immediately; refresh in the background if due.\nrefresh       Perform a due refresh (HTTP 10s; app-server fallback 30s).\nherdr-config  Print a Herdr [ui] configuration snippet; does not change files."
         ),
         "--version" | "-V" => println!("herdr-quota {}", env!("CARGO_PKG_VERSION")),
         _ => {
