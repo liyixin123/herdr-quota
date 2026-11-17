@@ -18,7 +18,7 @@ import unittest
 import urllib.error
 import urllib.request
 
-# Bootstrap pin shared with the README one-liner; re-pin both when cutting a release.
+# Use an already published bootstrap to exercise compatibility before a new tag exists.
 BOOTSTRAP_REF = 'v0.1.2'
 SCRIPT_URL = f'https://raw.githubusercontent.com/liyixin123/herdr-quota/{BOOTSTRAP_REF}/scripts/remote.sh'
 LATEST_SUMS_URL = 'https://github.com/liyixin123/herdr-quota/releases/latest/download/SHA256SUMS'
@@ -139,7 +139,20 @@ done
         version, _, _ = self.published_release()
         self.run_remote()
         self.assertEqual(self.installed_version(), 'herdr-quota ' + version)
-        self.assertEqual(self.config.read_text(), first)
+        # The downloaded published version can have different managed defaults
+        # from the locally built previous-version fixture (e.g. polling cadence).
+        before = tomllib.loads(first)
+        after = tomllib.loads(self.config.read_text())
+        for config in (before, after):
+            entries = config['ui']['tab_bar_right']
+            managed = [entry for entry in entries if '# herdr-quota' in entry.get('command', '')]
+            self.assertEqual(len(managed), 1)
+            self.assertGreater(managed[0]['interval_seconds'], 0)
+            managed[0].pop('interval_seconds')
+        self.assertEqual(after, before)
+        updated = self.config.read_text()
+        self.run_remote()
+        self.assertEqual(self.config.read_text(), updated)
 
     def test_download_and_checksum_failure_preserve_install_then_retry(self):
         self.run_remote()
