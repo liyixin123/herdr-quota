@@ -200,6 +200,12 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        "uninstall" => {
+            if let Err(error) = management::uninstall(&options) {
+                eprintln!("herdr-quota: {error}");
+                std::process::exit(1);
+            }
+        }
         "status" => status(&options),
         "herdr-config" => {
             if herdr_config(&options).is_err() {
@@ -215,7 +221,7 @@ fn main() {
             println!("{}", cache::read(&options.cache_dir).render(now()));
         }
         "--help" | "-h" | "help" => println!(
-            "herdr-quota [status|refresh|herdr-config|install|configure] [--cache-dir ABSOLUTE_PATH] [--codex EXECUTABLE]\n\ninstall       Install to ~/.local/bin, merge Herdr config and reload.\nconfigure     Merge Herdr config and reload using this executable.\nManagement options: --config ABSOLUTE_PATH --install-dir ABSOLUTE_PATH --herdr EXECUTABLE\n\nstatus        Print cached quota immediately; refresh in the background if due.\nrefresh       Perform a due refresh in the foreground (15s protocol deadline).\nherdr-config  Print a Herdr [ui] configuration snippet; does not change files."
+            "herdr-quota [status|refresh|herdr-config|install|configure|uninstall] [--cache-dir ABSOLUTE_PATH] [--codex EXECUTABLE]\n\ninstall       Install to ~/.local/bin, merge Herdr config and reload.\nconfigure     Merge Herdr config and reload using this executable.\nuninstall     Remove managed Herdr status, reload, then remove installed program.\nManagement options: --config ABSOLUTE_PATH --install-dir ABSOLUTE_PATH --herdr EXECUTABLE\n\nstatus        Print cached quota immediately; refresh in the background if due.\nrefresh       Perform a due refresh in the foreground (15s protocol deadline).\nherdr-config  Print a Herdr [ui] configuration snippet; does not change files."
         ),
         "--version" | "-V" => println!("herdr-quota {}", env!("CARGO_PKG_VERSION")),
         _ => {
