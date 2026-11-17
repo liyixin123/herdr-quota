@@ -291,6 +291,22 @@ fn generated_command_handles_shell_metacharacters_in_paths() {
 }
 
 #[test]
+fn slow_starting_app_server_still_yields_quota() {
+    // A cold Node.js `codex app-server` can stay silent for well over ten
+    // seconds before its first reply. That start-up cost must not be reported
+    // as a failed read, so the session budget has to exceed it.
+    let f = Fixture::new();
+    let script = fs::read_to_string(&f.server).unwrap();
+    fs::write(
+        &f.server,
+        script.replace("while IFS=", "sleep 16\nwhile IFS="),
+    )
+    .unwrap();
+    let text = String::from_utf8(f.run("refresh").stdout).unwrap();
+    assert!(text.contains("72%"), "{text}");
+}
+
+#[test]
 fn unresponsive_app_server_has_bounded_lifetime() {
     let f = Fixture::new();
     fs::write(
@@ -301,5 +317,7 @@ fn unresponsive_app_server_has_bounded_lifetime() {
     let started = std::time::Instant::now();
     let text = String::from_utf8(f.run("refresh").stdout).unwrap();
     assert!(text.contains("未知"));
-    assert!(started.elapsed() < std::time::Duration::from_secs(20));
+    // Bounded by the session budget (30s) with margin; a hung server must still
+    // terminate instead of blocking the caller forever.
+    assert!(started.elapsed() < std::time::Duration::from_secs(40));
 }

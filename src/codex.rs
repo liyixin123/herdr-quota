@@ -8,6 +8,12 @@ use std::time::{Duration, Instant};
 
 use crate::model::{Quota, normalize};
 
+/// Total budget for one app-server session: start-up plus every request.
+/// A cold Node.js `codex app-server` can stay silent for over ten seconds
+/// before answering `initialize`, so this must stay well clear of that
+/// start-up cost; anything tighter reports healthy reads as failures.
+const SESSION_BUDGET: Duration = Duration::from_secs(30);
+
 pub enum Account {
     Chatgpt(String),
     LoggedOut,
@@ -60,7 +66,7 @@ impl Codex {
             child,
             stdin,
             messages,
-            deadline: Instant::now() + Duration::from_secs(15),
+            deadline: Instant::now() + SESSION_BUDGET,
             next_id: 1,
         };
         connection.request(

@@ -75,7 +75,7 @@ just check
 "$HOME/.local/bin/herdr-quota" status --codex /absolute/path/to/codex
 ```
 
-`refresh` 在前台读取，协议总超时 15 秒；60 秒内复用缓存。`status` 立即输出缓存，到期或额度窗口重置后启动后台读取，初次可能显示“读取中”。Herdr 每 5 秒调用一次本地 `status`，网络额度读取仍限每 60 秒一次。`--codex` 默认从 PATH 查找；自动安装会将发现的绝对路径写入配置。
+`refresh` 在前台读取，单次会话总预算 30 秒（含冷启动 `codex app-server` 的开销）；60 秒内复用缓存。`status` 立即输出缓存，到期或额度窗口重置后启动后台读取，初次可能显示“读取中”。Herdr 每 5 秒调用一次本地 `status`，网络额度读取仍限每 60 秒一次。`--codex` 默认从 PATH 查找；自动安装会将发现的绝对路径写入配置。
 
 ### 常见问题
 
