@@ -15,8 +15,12 @@
 文案示例（仅示意，非真实额度）：
 
 ```text
-Codex 剩余 │ 5h [████░░] 78% ↻2h14m │ 1w [███░░░] 63% ↻3d08h
+Codex 剩余 │ 5h [████░░] 78% ↻2h10m │ 1w [███░░░] 63% ↻3d07h
 ```
+
+实际 tab 栏显示效果（示意数据：测试夹具账号，按实际程序输出逐字符渲染；不含真实账号、路径或会话内容）：
+
+![Herdr tab 栏额度显示（示意数据）](docs/images/quota-display.png)
 
 使用竖线区分额度窗口，异常状态以方括号标记，例如 `[过期]`、`[读取失败]`。Herdr 0.9.5 会剥离命令输出的 ANSI 颜色，因此这里使用纯文本分隔。
 
@@ -91,11 +95,13 @@ just check
 
 ```sh
 just check
-# 远程入口回归（开发环境需要 Python 3.11+ 和 jq；匿名公开端点回归需要网络）
-cargo build --release --locked
-python3 tests/remote/build_previous.py target/previous/herdr-quota
-PREVIOUS_TEST_BINARY=target/previous/herdr-quota python3 -m unittest discover -s tests/remote
 ```
+
+远程入口回归命令、开发前置条件与完整贡献流程见[贡献指南](CONTRIBUTING.md)；CI 检查与仓库保护见 [docs/ci.md](docs/ci.md)。
+
+## 贡献与反馈
+
+贡献步骤、开发前置条件与检查方式见[贡献指南](CONTRIBUTING.md)。提交 Issue 请使用仓库模板并附环境信息（平台与架构、Herdr / Codex CLI 版本、安装方式、配置路径情况）；安全问题请使用[私有漏洞报告](SECURITY.md)，不要在公开 Issue 中包含凭据或账号信息。术语定义（如“当前账号”）见 [GLOSSARY.md](GLOSSARY.md)。
 
 ## 开源许可证
 
