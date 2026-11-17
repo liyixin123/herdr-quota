@@ -1,0 +1,8 @@
+# Generate an exact snippet with: herdr-quota herdr-config --codex /absolute/path/to/codex
+# Merge these fields into your existing [ui] table instead of replacing it.
+[ui]
+hide_tab_bar_when_single_tab = false
+tab_bar_position = "top"
+tab_bar_right = [
+  { type = "command", command = "'/absolute/path/to/herdr-quota' status --codex '/absolute/path/to/codex'", interval_seconds = 5, timeout_seconds = 2 },
+]
