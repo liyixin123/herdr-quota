@@ -2,7 +2,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::{
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Command, Output},
 };
 static NEXT: AtomicU64 = AtomicU64::new(0);
@@ -39,22 +39,32 @@ done
         self.command("install")
     }
     fn command(&self, command: &str) -> Output {
-        Command::new(env!("CARGO_BIN_EXE_herdr-quota"))
-            .arg(command)
-            .arg("--install-dir")
-            .arg(self.0.join("bin"))
-            .arg("--config")
-            .arg(self.0.join("config.toml"))
-            .arg("--cache-dir")
-            .arg(self.0.join("cache"))
-            .arg("--codex")
-            .arg(self.0.join("codex"))
-            .arg("--herdr")
-            .arg(self.0.join("herdr"))
-            .env("HOME", &self.0)
-            .env("XDG_DATA_HOME", self.0.join("data"))
+        self.cli(command, Path::new(env!("CARGO_BIN_EXE_herdr-quota")))
             .output()
             .unwrap()
+    }
+    fn cli(&self, command: &str, binary: &Path) -> Command {
+        let mut cli = Command::new("sh");
+        cli.args([
+            "-c",
+            r#"umask 077; exec "$@""#,
+            "herdr-quota-test",
+            binary.to_str().unwrap(),
+        ])
+        .arg(command)
+        .arg("--install-dir")
+        .arg(self.0.join("bin"))
+        .arg("--config")
+        .arg(self.0.join("config.toml"))
+        .arg("--cache-dir")
+        .arg(self.0.join("cache"))
+        .arg("--codex")
+        .arg(self.0.join("codex"))
+        .arg("--herdr")
+        .arg(self.0.join("herdr"))
+        .env("HOME", &self.0)
+        .env("XDG_DATA_HOME", self.0.join("data"));
+        cli
     }
 }
 impl Drop for Fixture {
@@ -157,6 +167,11 @@ fn install_accepts_array_of_table_status_configuration() {
     assert!(text.contains("# herdr-quota"));
     assert!(f.run().status.success());
     assert_eq!(text, fs::read_to_string(f.0.join("config.toml")).unwrap());
+    assert!(f.command("uninstall").status.success());
+    let cleaned = fs::read_to_string(f.0.join("config.toml")).unwrap();
+    assert!(cleaned.contains("type = 'hostname'"));
+    assert!(!cleaned.contains("# herdr-quota"));
+    assert!(!cleaned.contains("hide_tab_bar_when_single_tab"));
 }
 
 #[test]
@@ -406,4 +421,85 @@ fn uninstall_without_install_record_can_retry_failed_reload() {
             .unwrap()
             .contains("hide_tab_bar_when_single_tab = false")
     );
+}
+
+#[test]
+fn configure_and_uninstall_preserve_existing_config_permissions_under_restrictive_umask() {
+    let f = Fixture::new();
+    let config = f.0.join("config.toml");
+    fs::write(&config, "[ui]\nhide_tab_bar_when_single_tab = true\n").unwrap();
+    fs::set_permissions(&config, fs::Permissions::from_mode(0o640)).unwrap();
+    for command in ["configure", "uninstall"] {
+        let output = f.command(command);
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            fs::metadata(&config).unwrap().permissions().mode() & 0o777,
+            0o640,
+            "after {command}"
+        );
+    }
+}
+
+#[test]
+fn configure_and_uninstall_preserve_tab_setting_inline_comment() {
+    let f = Fixture::new();
+    let config = f.0.join("config.toml");
+    fs::write(
+        &config,
+        "[ui]\nhide_tab_bar_when_single_tab = true # keep my explanation\n",
+    )
+    .unwrap();
+    assert!(f.command("configure").status.success());
+    let installed = fs::read_to_string(&config).unwrap();
+    assert!(installed.contains("hide_tab_bar_when_single_tab = false # keep my explanation"));
+    // A later user edit to the comment must survive restoration of the old value.
+    fs::write(
+        &config,
+        installed.replace("keep my explanation", "updated explanation"),
+    )
+    .unwrap();
+    assert!(f.command("configure").status.success());
+    assert!(f.command("uninstall").status.success());
+    assert!(
+        fs::read_to_string(&config)
+            .unwrap()
+            .contains("hide_tab_bar_when_single_tab = true # updated explanation")
+    );
+}
+
+#[test]
+fn corrupt_install_record_is_retained_on_uninstall_and_repaired_by_install() {
+    let f = Fixture::new();
+    assert!(f.run().status.success());
+    let config = f.0.join("config.toml");
+    let original = fs::read_to_string(&config).unwrap();
+    let state = f.0.join("data/herdr-quota/install.json");
+    fs::write(&state, "{broken").unwrap();
+    let output = f.command("uninstall");
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("repair before rerunning uninstall"));
+    assert_eq!(fs::read_to_string(&state).unwrap(), "{broken");
+    assert_eq!(fs::read_to_string(&config).unwrap(), original);
+    assert!(f.0.join("bin/herdr-quota").exists());
+    assert!(f.run().status.success());
+    assert!(f.command("uninstall").status.success());
+}
+
+#[test]
+fn configuring_installed_program_retains_ownership_for_uninstall() {
+    let f = Fixture::new();
+    let binary = f.0.join("bin/herdr-quota");
+    assert!(f.run().status.success());
+    let output = f.cli("configure", &binary).output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(f.command("uninstall").status.success());
+    assert!(!binary.exists());
 }
