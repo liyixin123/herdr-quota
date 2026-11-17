@@ -4,5 +4,5 @@
 hide_tab_bar_when_single_tab = false
 tab_bar_position = "top"
 tab_bar_right = [
-  { type = "command", command = "'/absolute/path/to/herdr-quota' status --codex '/absolute/path/to/codex'", interval_seconds = 5, timeout_seconds = 2 },
+  { type = "command", command = "'/absolute/path/to/herdr-quota' status --codex '/absolute/path/to/codex'", interval_seconds = 30, timeout_seconds = 2 },
 ]

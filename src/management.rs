@@ -249,14 +249,14 @@ pub fn install(options: &Options, copy: bool) -> io::Result<()> {
         let mut entry = InlineTable::new();
         entry.insert("type", Value::from("command"));
         entry.insert("command", Value::from(command.as_str()));
-        entry.insert("interval_seconds", Value::from(5));
+        entry.insert("interval_seconds", Value::from(30));
         entry.insert("timeout_seconds", Value::from(2));
         entries.push(entry);
     } else if let Some(entries) = entries.as_array_of_tables_mut() {
         let mut entry = toml_edit::Table::new();
         entry.insert("type", value("command"));
         entry.insert("command", value(command.as_str()));
-        entry.insert("interval_seconds", value(5));
+        entry.insert("interval_seconds", value(30));
         entry.insert("timeout_seconds", value(2));
         entries.push(entry);
     } else {

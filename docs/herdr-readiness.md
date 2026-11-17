@@ -84,7 +84,7 @@ Codex 剩余 · 5h [█████░] 78% ↻2h41m · 1w [█░░░░░] 
 
 ## 待验证与接入建议
 
-1. 将 Rust 程序的 `status` 一行输出接入同样的 command 配置；建议 Herdr 每 5 秒调用一次、超时 2 秒。`status` 应立即输出缓存，网络额度读取由独立刷新处理、维持用户确认的 60 秒周期，倒计时保持分钟精度。这样启动后能较快显示首次刷新结果，不把慢网络阻塞放进状态栏。
+1. 将 Rust 程序的 `status` 一行输出接入同样的 command 配置；建议 Herdr 每 30 秒调用一次、超时 2 秒。`status` 应立即输出缓存，网络额度读取由独立刷新处理、维持用户确认的 60 秒周期，倒计时保持分钟精度。这样启动后能较快显示首次刷新结果，不把慢网络阻塞放进状态栏。
 2. 用真实程序补验初次无缓存、账号不可用、刷新失败旧缓存、重置时间缺失及倒计时归零；本次静态 UI 测试没有验证这些数据行为。
 3. 尚未验收 zoom、64 列及以下移动布局、所有交互模式、重新连接和多客户端；也未实测 ANSI 剥离、失败清空、超时等异常分支，这些目前仍以官方文档为依据。
 4. **首期不需要 `herdr-plugin.toml`。** 状态区直接执行 Rust 二进制即可，manifest 不会自动添加这个配置区域。若后续需要 Herdr 插件分发、action 或详情 pane，再增加插件包装；不要为了全局文本显示额外创建 pane。
@@ -96,7 +96,7 @@ Codex 剩余 · 5h [█████░] 78% ↻2h41m · 1w [█░░░░░] 
 hide_tab_bar_when_single_tab = false
 tab_bar_position = "top"
 tab_bar_right = [
-  { type = "command", command = "/absolute/path/herdr-quota status", interval_seconds = 5, timeout_seconds = 2 },
+  { type = "command", command = "/absolute/path/herdr-quota status", interval_seconds = 30, timeout_seconds = 2 },
 ]
 ```
 

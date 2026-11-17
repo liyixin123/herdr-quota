@@ -34,17 +34,17 @@ Codex 剩余 │ 5h [████░░] 78% ↻2h10m │ 1w [███░░░
 
 ### 一条命令安装、重试或更新
 
-入口脚本固定到 `v0.1.2` tag，程序本身每次选择最新 Release，因此重跑同一命令即可安装、更新或修复未完成的安装：
+入口脚本固定到 `v0.1.3` tag，程序本身每次选择最新 Release，因此重跑同一命令即可安装、更新或修复未完成的安装：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/liyixin123/herdr-quota/v0.1.2/scripts/remote.sh | sh -s install
+curl -fsSL https://raw.githubusercontent.com/liyixin123/herdr-quota/v0.1.3/scripts/remote.sh | sh -s install
 ```
 
 `| sh` 在这里是安全的：脚本不读标准输入，`install` 是它的最后一步，前面依次完成 HTTPS 下载、SHA256 校验、归档结构检查（只允许根目录单个 `herdr-quota` 普通文件）和 `--version` 与 tag 一致性核对。下载被截断只会让它在校验前报错退出，不可能跳过校验去安装。
 
 成功时程序安装到 `~/.local/bin/herdr-quota`，自动定位 Codex 的绝对路径、验证订阅登录，在修改配置前创建 0600 权限的备份并打印路径，然后重载 Herdr。配置默认使用 `HERDR_CONFIG_PATH`、`$XDG_CONFIG_HOME/herdr/config.toml` 或 `~/.config/herdr/config.toml`。无需将安装目录加入 PATH；配置使用绝对路径。保留已有 tab 栏位置、其他状态项及注释，并开启单 tab 时显示 tab 栏。
 
-等待约 5 秒，在 Herdr 的 tab 行右侧应看到 `Codex 剩余` 和 5h / 1w 百分比、重置倒计时。空间不足时 Herdr 会隐藏状态区。状态与当前 pane 是否运行 Codex 无关，只支持本机 server。
+等待约 30 秒，在 Herdr 的 tab 行右侧应看到 `Codex 剩余` 和 5h / 1w 百分比、重置倒计时。空间不足时 Herdr 会隐藏状态区。状态与当前 pane 是否运行 Codex 无关，只支持本机 server。
 
 同一命令支持重复安装、更新与失败后重试，不会添加重复配置。下载、校验或发行包验证失败时保留现有程序。Herdr 未启动或重载失败时，修复后重跑同一命令；已安装程序和已保存配置会保留用于恢复。配置解析失败不会覆盖原文件。
 
@@ -53,7 +53,7 @@ curl -fsSL https://raw.githubusercontent.com/liyixin123/herdr-quota/v0.1.2/scrip
 将上面安装命令末尾的 `install` 换成 `uninstall`，即为卸载命令：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/liyixin123/herdr-quota/v0.1.2/scripts/remote.sh | sh -s uninstall
+curl -fsSL https://raw.githubusercontent.com/liyixin123/herdr-quota/v0.1.3/scripts/remote.sh | sh -s uninstall
 ```
 
 卸载同样下载并验证临时清理程序，因此即使已安装程序被手动删除也可清理；不需要 Codex 或登录信息。只移除本程序管理的额度项和安装文件，保留其他配置、备份和额度缓存；不会用旧备份覆盖用户后续修改。失败后修复并重跑，支持重复卸载。详细恢复规则、路径参数见[安装管理](docs/install-management.md)。
@@ -75,7 +75,7 @@ just check
 "$HOME/.local/bin/herdr-quota" status --codex /absolute/path/to/codex
 ```
 
-`refresh` 在前台读取，单次会话总预算 30 秒（含冷启动 `codex app-server` 的开销）；60 秒内复用缓存。`status` 立即输出缓存，到期或额度窗口重置后启动后台读取，初次可能显示“读取中”。Herdr 每 5 秒调用一次本地 `status`，网络额度读取仍限每 60 秒一次。`--codex` 默认从 PATH 查找；自动安装会将发现的绝对路径写入配置。
+`refresh` 在前台读取，优先通过 HTTP 查询文件认证账号的额度；认证来源不明确或查询失败时回退到 `codex app-server`（HTTP 预算 10 秒，回退的 app-server 会话另有 30 秒预算）。60 秒内复用缓存。`status` 立即输出缓存，到期或额度窗口重置后启动后台读取，初次可能显示“读取中”。Herdr 每 30 秒调用一次本地 `status`，网络额度读取仍限每 60 秒一次。`--codex` 默认从 PATH 查找；自动安装会将发现的绝对路径写入配置。HTTP 快路径仅用于与 PATH 默认 Codex 相同的程序，并使用当前进程的 `CODEX_HOME`；自定义执行路径回退到 app-server，保留包装脚本选择账号的行为。
 
 ### 常见问题
 
@@ -88,7 +88,8 @@ just check
 
 ## 数据和失败状态
 
-- 每次刷新新建短生命周期 `codex app-server`，使用 Codex 自己管理的登录状态；不创建模型会话或启动 turn。
+- 优先只读本机 Codex 文件凭据，直接通过 HTTPS 查询额度，减少重复启动进程；不自行刷新或写入认证凭据。无法确认文件认证来源、令牌失效或 HTTP 查询失败时，回退到短生命周期 `codex app-server`，由 Codex 处理认证。不创建模型会话或启动 turn。
+- HTTP 查询使用 Codex 内部额度接口，接口变化时依靠 app-server 回退保持兼容。
 - 按窗口时长识别 5h / 1w，填充部分表示剩余；不将 API 余额或 token 统计当成订阅额度。
 - 缺少窗口、非法百分比、未登录、非 ChatGPT 认证均显示未知或不可用；缺少重置时间显示“重置未知”。归零显示“待刷新”，不会自动补满额度。
 - 同一可识别账号的额度请求失败时保留旧值并标记“过期”。账号无法验证、退出登录或检测到变化时清空旧额度，避免归属错误；跨进程账号变化在下次刷新时检测，不保证瞬时跟随。
