@@ -85,7 +85,7 @@ jobs:
         run: |
           python3 tests/remote/build_previous.py "$PREVIOUS_TEST_BINARY"
           python3 -m unittest discover -s tests/remote
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: package-${{ matrix.target }}
           path: dist/*
