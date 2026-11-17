@@ -8,12 +8,12 @@
 
 2026-11-17，使用 `/private/tmp/herdr-quota-codex-probe.py` 启动独立 stdio app-server，完成 `initialize → initialized → account/read(refreshToken:false) → account/rateLimits/read(excludeResetCreditDetails:true)`。探针只输出账号类型、身份字段是否存在与窗口数字，丢弃 stderr，不输出 email、userId、accountId、bucket 标识或完整响应。设置总时限 30 秒，退出时终止并回收子进程。沙箱内首次运行在响应前 EOF，原因未记录；获授权的沙箱外运行成功。
 
-观测到 `account.type = chatgpt`；`userId` 与额度 `accountId` 均存在，但未记录其值。返回一个 bucket，两个窗口如下；百分比和重置值均为数字。
+观测到 `account.type = chatgpt`；`userId` 与额度 `accountId` 均存在，但未记录其值。返回一个 bucket，两个窗口如下；百分比和重置值均为数字。原始真实快照中的 `usedPercent`、剩余百分比与 `resetsAt` 数值已按敏感信息审计（见 [security-audit.md](security-audit.md)）脱敏，仅保留窗口结构：
 
 | 返回位置 | windowDurationMins | usedPercent | 计算剩余 | resetsAt（Unix 秒） |
 | --- | --- | --- | --- | --- |
-| primary | 300 | 28 | 72% | 1794896442 |
-| secondary | 10080 | 67 | 33% | 1794908848 |
+| primary | 300 | [已脱敏] | [已脱敏] | [已脱敏] |
+| secondary | 10080 | [已脱敏] | [已脱敏] | [已脱敏] |
 
 这证明本次账号与本机版本能够取得目标窗口，不能保证所有账号都具有相同窗口或固定位置。未创建 thread 或模型 turn；未验证通知、切换账号、刷新失败及跨进程变化。
 
@@ -82,7 +82,7 @@ codex app-server generate-json-schema --out /private/tmp/herdr-quota-codex-schem
 - 比较 CLI 官方额度展示与读取结果，确认剩余方向、重置时间单位及账号/工作区归属。
 - 验证其他 Codex 客户端产生用量时的通知覆盖，以及账号切换后的快照归属、缓存隔离和重新启动需求。
 
-上表记录真实快照中的无身份数字；JSON 仅是请求示例。在线文档可能领先于本机，字段兼容性以 0.169.0 生成 schema 为准。
+上表 windowDurationMins 来自真实快照；其余数值列已脱敏；JSON 仅是请求示例。在线文档可能领先于本机，字段兼容性以 0.169.0 生成 schema 为准。
 
 ## 首期实现验证
 
