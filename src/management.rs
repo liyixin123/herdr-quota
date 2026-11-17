@@ -11,6 +11,65 @@ use std::{
 };
 use toml_edit::{DocumentMut, InlineTable, Item, Value, value};
 
+/// Both full installation records and interrupted-uninstall recovery records use this shape.
+#[derive(Default, serde::Serialize, serde::Deserialize)]
+struct InstallationRecord {
+    #[serde(default)]
+    binary: Option<PathBuf>,
+    #[serde(default)]
+    config: Option<PathBuf>,
+    // Missing ownership must never authorize deleting a developer executable.
+    #[serde(default)]
+    installed: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    command: Option<String>,
+    #[serde(default, skip_serializing_if = "PreviousHide::is_unrecorded")]
+    previous_hide: PreviousHide,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ui_existed: Option<bool>,
+}
+
+// A missing field in a recovery record means no restoration is authorized;
+// explicit null in an installation record means the original setting was absent.
+#[derive(Default)]
+enum PreviousHide {
+    #[default]
+    Unrecorded,
+    Recorded(Option<String>),
+}
+impl PreviousHide {
+    fn is_unrecorded(&self) -> bool {
+        matches!(self, Self::Unrecorded)
+    }
+}
+impl serde::Serialize for PreviousHide {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::Unrecorded => None::<String>.serialize(serializer),
+            Self::Recorded(value) => value.serialize(serializer),
+        }
+    }
+}
+impl<'de> serde::Deserialize<'de> for PreviousHide {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Option::<String>::deserialize(deserializer).map(Self::Recorded)
+    }
+}
+impl InstallationRecord {
+    fn read(path: &Path) -> io::Result<Option<Self>> {
+        match fs::read(path) {
+            Ok(bytes) => serde_json::from_slice(&bytes).map(Some).map_err(|e| {
+                io::Error::other(format!("cannot parse installation state {}; retain it for recovery and repair before rerunning uninstall: {e}", path.display()))
+            }),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+    fn write(&self, path: &Path) -> io::Result<()> {
+        atomic_write(path, serde_json::to_string_pretty(self)?.as_bytes(), 0o600)
+    }
+}
+
 pub fn home() -> io::Result<PathBuf> {
     env::var_os("HOME")
         .map(PathBuf::from)
@@ -70,6 +129,7 @@ pub fn atomic_write(path: &Path, bytes: &[u8], mode: u32) -> io::Result<()> {
             .mode(mode)
             .open(&temp)?;
         file.write_all(bytes)?;
+        file.set_permissions(fs::Permissions::from_mode(mode))?;
         file.sync_all()?;
         fs::rename(&temp, path)
     })();
@@ -80,6 +140,41 @@ pub fn atomic_write(path: &Path, bytes: &[u8], mode: u32) -> io::Result<()> {
 }
 pub fn managed(command: &str) -> bool {
     command.ends_with(" # herdr-quota")
+}
+
+/// Remove only marked commands, for either supported TOML representation.
+fn remove_managed_entries(entries: &mut Item) -> io::Result<()> {
+    if let Some(array) = entries.as_array_mut() {
+        array.retain(|entry| {
+            !entry
+                .as_inline_table()
+                .and_then(|t| t.get("command"))
+                .and_then(Value::as_str)
+                .is_some_and(managed)
+        });
+    } else if let Some(array) = entries.as_array_of_tables_mut() {
+        array.retain(|entry| {
+            !entry
+                .get("command")
+                .and_then(Item::as_str)
+                .is_some_and(managed)
+        });
+    } else {
+        return Err(io::Error::other(
+            "ui.tab_bar_right must be an array; repair config and rerun",
+        ));
+    }
+    Ok(())
+}
+
+/// Replace a value while retaining the user's surrounding whitespace and comment.
+fn replace_value(ui: &mut dyn toml_edit::TableLike, key: &str, mut replacement: Item) {
+    if let Some(current) = ui.get(key).and_then(Item::as_value)
+        && let Some(value) = replacement.as_value_mut()
+    {
+        *value.decor_mut() = current.decor().clone();
+    }
+    ui.insert(key, replacement);
 }
 
 pub fn install(options: &Options, copy: bool) -> io::Result<()> {
@@ -149,14 +244,8 @@ pub fn install(options: &Options, copy: bool) -> io::Result<()> {
         quote(&codex)?
     );
     let entries = ui.get_mut("tab_bar_right").expect("inserted status array");
+    remove_managed_entries(entries)?;
     if let Some(entries) = entries.as_array_mut() {
-        entries.retain(|entry| {
-            !entry
-                .as_inline_table()
-                .and_then(|t| t.get("command"))
-                .and_then(Value::as_str)
-                .is_some_and(managed)
-        });
         let mut entry = InlineTable::new();
         entry.insert("type", Value::from("command"));
         entry.insert("command", Value::from(command.as_str()));
@@ -164,12 +253,6 @@ pub fn install(options: &Options, copy: bool) -> io::Result<()> {
         entry.insert("timeout_seconds", Value::from(2));
         entries.push(entry);
     } else if let Some(entries) = entries.as_array_of_tables_mut() {
-        entries.retain(|entry| {
-            !entry
-                .get("command")
-                .and_then(Item::as_str)
-                .is_some_and(managed)
-        });
         let mut entry = toml_edit::Table::new();
         entry.insert("type", value("command"));
         entry.insert("command", value(command.as_str()));
@@ -181,22 +264,33 @@ pub fn install(options: &Options, copy: bool) -> io::Result<()> {
             "ui.tab_bar_right must be an array; repair config and rerun",
         ));
     }
-    ui.insert("hide_tab_bar_when_single_tab", value(false));
+    replace_value(ui, "hide_tab_bar_when_single_tab", value(false));
     let updated = doc.to_string();
     // Persist ownership before mutation, allowing retry after an interrupted write/reload.
-    let old_state: serde_json::Value = fs::read(&state)
+    // Installation can repair an absent/corrupt record; uninstall retains a corrupt record.
+    let old_state = InstallationRecord::read(&state)
         .ok()
-        .and_then(|s| serde_json::from_slice(&s).ok())
+        .flatten()
         .unwrap_or_default();
-    let same_config = old_state["config"].as_str() == config.to_str();
-    let saved = serde_json::json!({"binary":binary,"installed":copy,"config":config,"command":command,
-        "previous_hide":if same_config {old_state["previous_hide"].clone()} else {serde_json::json!(previous_hide)},
-        "ui_existed":if same_config {old_state["ui_existed"].clone()} else {serde_json::json!(ui_existed)}});
-    atomic_write(
-        &state,
-        serde_json::to_string_pretty(&saved)?.as_bytes(),
-        0o600,
-    )?;
+    let same_config = old_state.config.as_ref() == Some(&config);
+    let saved = InstallationRecord {
+        binary: Some(binary.clone()),
+        installed: copy
+            || (same_config && old_state.installed && old_state.binary.as_ref() == Some(&binary)),
+        config: Some(config.clone()),
+        command: Some(command.clone()),
+        previous_hide: if same_config {
+            old_state.previous_hide
+        } else {
+            PreviousHide::Recorded(previous_hide)
+        },
+        ui_existed: if same_config {
+            old_state.ui_existed
+        } else {
+            Some(ui_existed)
+        },
+    };
+    saved.write(&state)?;
     if copy && source != binary {
         atomic_write(&binary, &fs::read(source)?, 0o755)?;
     }
@@ -258,15 +352,8 @@ pub fn install(options: &Options, copy: bool) -> io::Result<()> {
 /// Remove only the owned status entry; never restore a whole installation backup.
 pub fn uninstall(options: &Options) -> io::Result<()> {
     let state = state_path()?;
-    let mut saved: Option<serde_json::Value> = match fs::read(&state) {
-        Ok(bytes) => Some(serde_json::from_slice(&bytes).map_err(|e| io::Error::other(format!("cannot parse installation state {}; retain it for recovery and repair before rerunning uninstall: {e}", state.display())))?),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => None,
-        Err(e) => return Err(e),
-    };
-    let recorded_config = saved
-        .as_ref()
-        .and_then(|s| s["config"].as_str())
-        .map(PathBuf::from);
+    let mut saved = InstallationRecord::read(&state)?;
+    let recorded_config = saved.as_ref().and_then(|s| s.config.clone());
     if let (Some(requested), Some(recorded)) = (&options.config, &recorded_config)
         && requested != recorded
     {
@@ -279,17 +366,13 @@ pub fn uninstall(options: &Options) -> io::Result<()> {
         .clone()
         .or(recorded_config)
         .unwrap_or(config_path()?);
-    let binary = saved
-        .as_ref()
-        .and_then(|s| s["binary"].as_str())
-        .map(PathBuf::from)
-        .unwrap_or(
-            options
-                .install_dir
-                .clone()
-                .unwrap_or(home()?.join(".local/bin"))
-                .join("herdr-quota"),
-        );
+    let binary = saved.as_ref().and_then(|s| s.binary.clone()).unwrap_or(
+        options
+            .install_dir
+            .clone()
+            .unwrap_or(home()?.join(".local/bin"))
+            .join("herdr-quota"),
+    );
     if !config.is_absolute() || !binary.is_absolute() || !state.is_absolute() {
         return Err(io::Error::other(
             "configuration, data and binary paths must be absolute",
@@ -316,26 +399,7 @@ pub fn uninstall(options: &Options) -> io::Result<()> {
             io::Error::other("ui must be a TOML table; repair and rerun uninstall")
         })?;
         if let Some(entries) = ui.get_mut("tab_bar_right") {
-            if let Some(array) = entries.as_array_mut() {
-                array.retain(|entry| {
-                    !entry
-                        .as_inline_table()
-                        .and_then(|t| t.get("command"))
-                        .and_then(Value::as_str)
-                        .is_some_and(managed)
-                });
-            } else if let Some(array) = entries.as_array_of_tables_mut() {
-                array.retain(|entry| {
-                    !entry
-                        .get("command")
-                        .and_then(Item::as_str)
-                        .is_some_and(managed)
-                });
-            } else {
-                return Err(io::Error::other(
-                    "ui.tab_bar_right must be an array; repair and rerun uninstall",
-                ));
-            }
+            remove_managed_entries(entries)?;
         }
         // Restore the setting only while it still has our installed value.
         if ui
@@ -344,7 +408,7 @@ pub fn uninstall(options: &Options) -> io::Result<()> {
             == Some(false)
             && let Some(saved) = &saved
         {
-            if let Some(previous) = saved["previous_hide"].as_str() {
+            if let PreviousHide::Recorded(Some(previous)) = &saved.previous_hide {
                 let restored = format!("value = {}", previous.trim())
                     .parse::<DocumentMut>()
                     .map_err(|e| {
@@ -352,11 +416,12 @@ pub fn uninstall(options: &Options) -> io::Result<()> {
                             "invalid previous tab setting in installation state: {e}"
                         ))
                     })?;
-                ui.insert("hide_tab_bar_when_single_tab", restored["value"].clone());
-            } else if saved
-                .get("previous_hide")
-                .is_some_and(serde_json::Value::is_null)
-            {
+                replace_value(
+                    ui,
+                    "hide_tab_bar_when_single_tab",
+                    restored["value"].clone(),
+                );
+            } else if matches!(saved.previous_hide, PreviousHide::Recorded(None)) {
                 ui.remove("hide_tab_bar_when_single_tab");
             }
         }
@@ -364,12 +429,13 @@ pub fn uninstall(options: &Options) -> io::Result<()> {
     let updated = doc.to_string();
     // A missing install record must not lose a pending reload after config cleanup.
     if saved.is_none() && (updated != original || binary.exists()) {
-        let recovery = serde_json::json!({"binary":binary,"config":config,"installed":true});
-        atomic_write(
-            &state,
-            serde_json::to_string_pretty(&recovery)?.as_bytes(),
-            0o600,
-        )?;
+        let recovery = InstallationRecord {
+            binary: Some(binary.clone()),
+            config: Some(config.clone()),
+            installed: true,
+            ..InstallationRecord::default()
+        };
+        recovery.write(&state)?;
         saved = Some(recovery);
     }
     if updated != original {
@@ -435,10 +501,7 @@ pub fn uninstall(options: &Options) -> io::Result<()> {
         }
     }
     // configure uses the developer executable directly, so it must never delete it.
-    if saved
-        .as_ref()
-        .is_none_or(|s| s["installed"].as_bool() == Some(true))
-    {
+    if saved.as_ref().is_none_or(|s| s.installed) {
         match fs::remove_file(&binary) {
             Ok(()) => println!("Removed program: {}", binary.display()),
             Err(e) if e.kind() == io::ErrorKind::NotFound => {

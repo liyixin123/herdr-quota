@@ -22,7 +22,7 @@ Codex 剩余 · 5h [████░░] 78% ↻2h14m · 1w [███░░░] 
 
 ## 安装与使用
 
-支持 **macOS ARM64** 和 **Linux x86_64**。先安装并启动 Herdr，安装 Codex CLI 并执行 `codex login`，使用 ChatGPT 订阅账号登录。本机验证版本为 Herdr 0.9.5、Codex CLI 0.169.0。
+支持 **macOS 15+ ARM64** 和 **Linux x86_64**（系统基线见[发行说明](docs/releases.md)）。先安装并启动 Herdr，安装 Codex CLI 并执行 `codex login`，使用 ChatGPT 订阅账号登录。本机验证版本为 Herdr 0.9.5、Codex CLI 0.169.0。
 
 安装工具需要 `sh`、`curl`、`tar`、`uname`、`mktemp`、`awk`、`chmod`、`rm`，以及 `sha256sum` 或 `shasum`。私有仓库下载还需要 `jq`（macOS 可用 `brew install jq`，Debian/Ubuntu 可用 `sudo apt-get install jq`）。普通安装无需 Git、Rust、just、Python 或 gh。
 
