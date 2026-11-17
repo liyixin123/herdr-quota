@@ -36,8 +36,11 @@ done
         Self(dir)
     }
     fn run(&self) -> Output {
+        self.command("install")
+    }
+    fn command(&self, command: &str) -> Output {
         Command::new(env!("CARGO_BIN_EXE_herdr-quota"))
-            .arg("install")
+            .arg(command)
             .arg("--install-dir")
             .arg(self.0.join("bin"))
             .arg("--config")
@@ -213,4 +216,194 @@ fn configuration_write_failure_retains_original_and_retries_after_repair() {
     assert!(f.0.join("config.toml").is_dir());
     fs::remove_dir(f.0.join("config.toml")).unwrap();
     assert!(f.run().status.success());
+}
+
+#[test]
+fn uninstall_preserves_user_edits_and_other_status_items() {
+    let f = Fixture::new();
+    fs::write(f.0.join("config.toml"), "# user comment\n[ui]\nhide_tab_bar_when_single_tab = true\ntab_bar_right = [{type='hostname'}]\n[terminal]\nfont_size = 12\n").unwrap();
+    assert!(f.run().status.success());
+    let installed = fs::read_to_string(f.0.join("config.toml")).unwrap();
+    fs::write(
+        f.0.join("config.toml"),
+        installed.replace("font_size = 12", "font_size = 18"),
+    )
+    .unwrap();
+    let output = f.command("uninstall");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let cleaned = fs::read_to_string(f.0.join("config.toml")).unwrap();
+    assert!(cleaned.contains("# user comment"));
+    assert!(cleaned.contains("type='hostname'"));
+    assert!(cleaned.contains("font_size = 18"));
+    assert!(cleaned.contains("hide_tab_bar_when_single_tab = true"));
+    assert!(!cleaned.contains("# herdr-quota"));
+    assert!(!f.0.join("bin/herdr-quota").exists());
+    assert!(!f.0.join("data/herdr-quota/install.json").exists());
+    assert!(f.command("uninstall").status.success());
+}
+
+#[test]
+fn uninstall_retains_recovery_on_reload_failure_and_finishes_after_retry() {
+    let f = Fixture::new();
+    assert!(f.run().status.success());
+    fs::write(f.0.join("stopped"), "").unwrap();
+    let output = f.command("uninstall");
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("rerun uninstall"));
+    assert!(f.0.join("bin/herdr-quota").exists());
+    assert!(f.0.join("data/herdr-quota/install.json").exists());
+    assert!(
+        !fs::read_to_string(f.0.join("config.toml"))
+            .unwrap()
+            .contains("# herdr-quota")
+    );
+    fs::remove_file(f.0.join("stopped")).unwrap();
+    fs::remove_file(f.0.join("bin/herdr-quota")).unwrap();
+    assert!(f.command("uninstall").status.success());
+    assert!(!f.0.join("data/herdr-quota/install.json").exists());
+}
+
+#[test]
+fn uninstall_reports_stopped_server_and_cleanup_effective_on_next_start() {
+    let f = Fixture::new();
+    assert!(f.run().status.success());
+    fs::write(f.0.join("herdr"), "#!/bin/sh\nif [ \"$1\" = status ]; then echo '{\"server\":{\"status\":\"not_running\",\"running\":false}}'; exit 0; fi\nexit 1\n").unwrap();
+    let output = f.command("uninstall");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("next start"));
+    assert!(!f.0.join("bin/herdr-quota").exists());
+}
+
+#[test]
+fn just_uninstall_builds_even_when_installed_program_was_manually_removed() {
+    let f = Fixture::new();
+    assert!(f.run().status.success());
+    fs::remove_file(f.0.join("bin/herdr-quota")).unwrap();
+    fs::remove_file(f.0.join("codex")).unwrap();
+    let cargo = f.0.join("cargo");
+    fs::write(&cargo, "#!/bin/sh\n[ \"$*\" = 'build --release --locked' ] || exit 2\nmkdir -p \"$CARGO_TARGET_DIR/release\"\ncp \"$TEST_BINARY\" \"$CARGO_TARGET_DIR/release/herdr-quota\"\n").unwrap();
+    fs::set_permissions(cargo, fs::Permissions::from_mode(0o700)).unwrap();
+    let output = Command::new("just")
+        .arg("uninstall")
+        .env(
+            "PATH",
+            format!("{}:{}", f.0.display(), std::env::var("PATH").unwrap()),
+        )
+        .env("HOME", &f.0)
+        .env("XDG_CONFIG_HOME", f.0.join("config"))
+        .env_remove("HERDR_CONFIG_PATH")
+        .env("XDG_DATA_HOME", f.0.join("data"))
+        .env("CARGO_TARGET_DIR", f.0.join("target"))
+        .env("TEST_BINARY", env!("CARGO_BIN_EXE_herdr-quota"))
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(!f.0.join(".local/bin/herdr-quota").exists());
+    assert!(String::from_utf8_lossy(&output.stdout).contains("Uninstallation complete"));
+}
+
+#[test]
+fn uninstall_without_state_removes_only_marked_entries_and_preserves_user_tab_setting() {
+    let f = Fixture::new();
+    fs::write(f.0.join("config.toml"), "[ui]\nhide_tab_bar_when_single_tab = true\n[[ui.tab_bar_right]]\ntype = 'command'\ncommand = 'echo custom herdr-quota'\n[[ui.tab_bar_right]]\ntype = 'command'\ncommand = 'old-path status # herdr-quota'\n").unwrap();
+    let output = f.command("uninstall");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = fs::read_to_string(f.0.join("config.toml")).unwrap();
+    assert!(text.contains("echo custom herdr-quota"));
+    assert!(text.contains("hide_tab_bar_when_single_tab = true"));
+    assert!(!text.contains("old-path"));
+    let backups: Vec<_> = fs::read_dir(&f.0)
+        .unwrap()
+        .map(|p| p.unwrap().path())
+        .filter(|p| {
+            p.file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .contains("uninstall-backup")
+        })
+        .collect();
+    assert_eq!(backups.len(), 1);
+    assert_eq!(
+        fs::metadata(&backups[0]).unwrap().permissions().mode() & 0o777,
+        0o600
+    );
+    assert!(
+        fs::read_to_string(&backups[0])
+            .unwrap()
+            .contains("old-path")
+    );
+}
+
+#[test]
+fn malformed_uninstall_config_preserves_program_and_state_for_repair() {
+    let f = Fixture::new();
+    assert!(f.run().status.success());
+    fs::write(f.0.join("config.toml"), "[broken\n").unwrap();
+    let output = f.command("uninstall");
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("repair TOML and rerun uninstall"));
+    assert!(f.0.join("bin/herdr-quota").exists());
+    assert!(f.0.join("data/herdr-quota/install.json").exists());
+    assert_eq!(
+        fs::read_to_string(f.0.join("config.toml")).unwrap(),
+        "[broken\n"
+    );
+    fs::remove_file(f.0.join("config.toml")).unwrap();
+    assert!(f.command("uninstall").status.success());
+    assert!(!f.0.join("config.toml").exists());
+}
+
+#[test]
+fn uninstall_leaves_developer_executable_and_later_user_tab_setting() {
+    let f = Fixture::new();
+    assert!(f.command("configure").status.success());
+    let text = fs::read_to_string(f.0.join("config.toml")).unwrap();
+    fs::write(
+        f.0.join("config.toml"),
+        text.replace(
+            "hide_tab_bar_when_single_tab = false",
+            "hide_tab_bar_when_single_tab = true",
+        ),
+    )
+    .unwrap();
+    assert!(f.command("uninstall").status.success());
+    assert!(std::path::Path::new(env!("CARGO_BIN_EXE_herdr-quota")).is_file());
+    assert!(
+        fs::read_to_string(f.0.join("config.toml"))
+            .unwrap()
+            .contains("hide_tab_bar_when_single_tab = true")
+    );
+}
+
+#[test]
+fn uninstall_without_install_record_can_retry_failed_reload() {
+    let f = Fixture::new();
+    fs::write(f.0.join("config.toml"), "[ui]\nhide_tab_bar_when_single_tab = false\ntab_bar_right = [{type='command', command='old status # herdr-quota'}]\n").unwrap();
+    fs::write(f.0.join("stopped"), "").unwrap();
+    assert!(!f.command("uninstall").status.success());
+    assert!(!f.command("uninstall").status.success());
+    fs::remove_file(f.0.join("stopped")).unwrap();
+    assert!(f.command("uninstall").status.success());
+    assert!(
+        fs::read_to_string(f.0.join("config.toml"))
+            .unwrap()
+            .contains("hide_tab_bar_when_single_tab = false")
+    );
 }
