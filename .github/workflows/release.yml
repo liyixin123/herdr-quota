@@ -1,0 +1,98 @@
+name: Release packages
+on:
+  push:
+    branches: ['implement/**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            target: aarch64-apple-darwin
+          - runner: ubuntu-22.04
+            target: x86_64-unknown-linux-musl
+    runs-on: ${{ matrix.runner }}
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '15.0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.89.0'
+          targets: ${{ matrix.target }}
+      - name: Install static Linux linker
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Select and validate package version
+        shell: bash
+        run: |
+          version=$(python3 -c 'import re; print(re.search(r"(?m)^version = \"([^\"]+)\"", open("Cargo.toml").read()).group(1))')
+          tag="v$version"
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            test "$GITHUB_REF_NAME" = "$tag"
+          fi
+          echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
+      - name: Test and build
+        run: |
+          cargo test --locked --target ${{ matrix.target }}
+          cargo build --release --locked --target ${{ matrix.target }}
+      - name: Verify runtime architecture and static Linux linking
+        shell: bash
+        run: |
+          file target/${{ matrix.target }}/release/herdr-quota
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            test "$(uname -m)" = x86_64
+            if readelf -l target/${{ matrix.target }}/release/herdr-quota | grep -q INTERP; then
+              echo 'Linux release must not require a dynamic loader' >&2
+              exit 1
+            fi
+          else
+            test "$(uname -m)" = arm64
+          fi
+      - name: Package and test extracted executable and downloads
+        env:
+          RELEASE_TEST_BINARY: target/${{ matrix.target }}/release/herdr-quota
+        run: |
+          python3 -m unittest discover -s tests/release
+          python3 scripts/release.py package --binary "$RELEASE_TEST_BINARY" --tag "$RELEASE_TAG" --target ${{ matrix.target }} --output dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: package-*
+          path: packages
+      - name: Combine platform checksums
+        run: |
+          mkdir dist
+          cp packages/*/*.tar.gz dist/
+          cat packages/*/SHA256SUMS | sort -k2 > dist/SHA256SUMS
+          cd dist
+          sha256sum --check SHA256SUMS
+      - name: Publish versioned assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes --repo "$GITHUB_REPOSITORY"
+      - name: Validate published downloads and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/verify-published.py --repo "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME" --output downloaded
