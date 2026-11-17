@@ -9,7 +9,7 @@
 | macOS ARM64 | `herdr-quota-v<VERSION>-aarch64-apple-darwin.tar.gz` | macOS 15.0 或更新版本；在 macOS 15 ARM64 runner 原生验证 |
 | Linux x86_64 | `herdr-quota-v<VERSION>-x86_64-unknown-linux-musl.tar.gz` | 静态 musl，无 glibc 或动态加载器依赖；支持范围以 Ubuntu 22.04 及更新版本的 x86_64 Linux 为基线，在 Ubuntu 22.04 runner 验证 |
 
-每个 gzip tar 包根目录只有一个可执行文件 `herdr-quota`，解压后可以直接运行，无需 Rust。`SHA256SUMS` 使用标准 `sha256sum` 格式，列出两个包的 SHA-256 摘要及完整文件名。
+每个 gzip tar 包根目录只有一个可执行文件 `herdr-quota`，解压后可以直接运行，无需 Rust。`SHA256SUMS` 使用标准 `sha256sum` 格式，列出两个包的 SHA-256 摘要及完整文件名。发行包按 MIT 分发，其中静态链接的第三方组件遵循各自的许可条款，见[许可证与第三方声明](license-notices.md)。
 
 资产浏览器地址为：
 
