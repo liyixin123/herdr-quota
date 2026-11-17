@@ -37,8 +37,10 @@ Codex 剩余 │ 5h [████░░] 78% ↻2h10m │ 1w [███░░░
 入口脚本固定到 `v0.1.2` tag，程序本身每次选择最新 Release，因此重跑同一命令即可安装、更新或修复未完成的安装：
 
 ```sh
-(set +x; umask 077; t=$(mktemp -d) || exit; trap 'rm -rf "$t"' 0; trap 'exit 130' HUP INT TERM; curl -q --fail --silent --show-error --proto '=https' --max-time 120 -o "$t/remote.sh" 'https://raw.githubusercontent.com/liyixin123/herdr-quota/v0.1.2/scripts/remote.sh' && sh "$t/remote.sh" install)
+curl -fsSL https://raw.githubusercontent.com/liyixin123/herdr-quota/v0.1.2/scripts/remote.sh | sh -s install
 ```
+
+`| sh` 在这里是安全的：脚本不读标准输入，`install` 是它的最后一步，前面依次完成 HTTPS 下载、SHA256 校验、归档结构检查（只允许根目录单个 `herdr-quota` 普通文件）和 `--version` 与 tag 一致性核对。下载被截断只会让它在校验前报错退出，不可能跳过校验去安装。
 
 成功时程序安装到 `~/.local/bin/herdr-quota`，自动定位 Codex 的绝对路径、验证订阅登录，在修改配置前创建 0600 权限的备份并打印路径，然后重载 Herdr。配置默认使用 `HERDR_CONFIG_PATH`、`$XDG_CONFIG_HOME/herdr/config.toml` 或 `~/.config/herdr/config.toml`。无需将安装目录加入 PATH；配置使用绝对路径。保留已有 tab 栏位置、其他状态项及注释，并开启单 tab 时显示 tab 栏。
 
@@ -48,7 +50,11 @@ Codex 剩余 │ 5h [████░░] 78% ↻2h10m │ 1w [███░░░
 
 ### 一条命令卸载
 
-将上面安装命令末尾的 `install` 换成 `uninstall`，即为卸载命令。
+将上面安装命令末尾的 `install` 换成 `uninstall`，即为卸载命令：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/liyixin123/herdr-quota/v0.1.2/scripts/remote.sh | sh -s uninstall
+```
 
 卸载同样下载并验证临时清理程序，因此即使已安装程序被手动删除也可清理；不需要 Codex 或登录信息。只移除本程序管理的额度项和安装文件，保留其他配置、备份和额度缓存；不会用旧备份覆盖用户后续修改。失败后修复并重跑，支持重复卸载。详细恢复规则、路径参数见[安装管理](docs/install-management.md)。
 

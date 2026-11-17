@@ -95,7 +95,9 @@ done
         return version, archive, entries[archive]
 
     def run_remote(self, action='install', success=True):
-        result = subprocess.run(['/bin/sh', str(self.script), action], env=self.env, capture_output=True, text=True, timeout=300)
+        # Mirrors the documented README invocation: pipe the script into `sh -s <action>`.
+        with self.script.open('rb') as script:
+            result = subprocess.run(['/bin/sh', '-s', action], stdin=script, env=self.env, capture_output=True, text=True, timeout=300)
         self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
         self.assertEqual(list(self.home.glob('herdr-quota.*')), [])
         return result
