@@ -91,6 +91,17 @@ grep -rnE '/Users/[A-Za-z]+|/home/[a-z]+' --exclude-dir=.git .
 
 复核人可在任意检出上重跑上述命令验证。
 
+### 集成分支复扫（2026-11-17，全部工单合入后）
+
+审计要求“其他工单分支合入后应按同口径复扫”，已在集成分支 `integrate/public-release`（`main` f284c45 之后共 12 个非合并+合并提交，含 #5–#8、#10、#11 全部交付）上执行同一二进制 gitleaks 8.30.1：
+
+```sh
+gitleaks detect --source . --log-opts="main..integrate/public-release" --no-banner
+gitleaks dir . --no-banner
+```
+
+结果：`12 commits scanned` → `no leaks found`；工作区 `scanned ~66.1 MB` → `no leaks found`。此前记录的 Gmail 邮箱暴露已按“剩余事项 2”改写并强制推送，复扫同时覆盖改写后的分支内容。
+
 ## 七、覆盖范围与无法检查的项目
 
 - 2 个 Actions 运行（implement/ticket-10 44087536288、implement/ticket-6 44087386407）审计时仍在进行/排队，日志不完整；其源提交为其他工单的本地分支，尚未推送。这些分支合入后应按同口径复扫。
