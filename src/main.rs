@@ -1,5 +1,6 @@
 mod cache;
 mod codex;
+mod management;
 mod model;
 
 use std::path::PathBuf;
@@ -13,6 +14,9 @@ struct Options {
     command: String,
     cache_dir: PathBuf,
     codex: PathBuf,
+    herdr: PathBuf,
+    config: Option<PathBuf>,
+    install_dir: Option<PathBuf>,
 }
 
 fn now() -> u64 {
@@ -32,6 +36,9 @@ fn options() -> Result<Options, &'static str> {
         command,
         cache_dir: cache::default_dir().map_err(|_| "cache directory unavailable")?,
         codex: "codex".into(),
+        herdr: "herdr".into(),
+        config: None,
+        install_dir: None,
     };
     while let Some(flag) = args.next() {
         match flag.to_str() {
@@ -46,6 +53,26 @@ fn options() -> Result<Options, &'static str> {
                     .next()
                     .map(PathBuf::from)
                     .ok_or("missing Codex executable")?
+            }
+            Some("--herdr") => {
+                options.herdr = args
+                    .next()
+                    .map(PathBuf::from)
+                    .ok_or("missing Herdr executable")?
+            }
+            Some("--config") => {
+                options.config = Some(
+                    args.next()
+                        .map(PathBuf::from)
+                        .ok_or("missing config path")?,
+                )
+            }
+            Some("--install-dir") => {
+                options.install_dir = Some(
+                    args.next()
+                        .map(PathBuf::from)
+                        .ok_or("missing install directory")?,
+                )
             }
             _ => return Err("unknown option"),
         }
@@ -167,6 +194,12 @@ fn main() {
         }
     };
     match options.command.as_str() {
+        "install" | "configure" => {
+            if let Err(error) = management::install(&options, options.command == "install") {
+                eprintln!("herdr-quota: {error}");
+                std::process::exit(1);
+            }
+        }
         "status" => status(&options),
         "herdr-config" => {
             if herdr_config(&options).is_err() {
@@ -182,7 +215,7 @@ fn main() {
             println!("{}", cache::read(&options.cache_dir).render(now()));
         }
         "--help" | "-h" | "help" => println!(
-            "herdr-quota [status|refresh|herdr-config] [--cache-dir ABSOLUTE_PATH] [--codex EXECUTABLE]\n\nstatus        Print cached quota immediately; refresh in the background if due.\nrefresh       Perform a due refresh in the foreground (15s protocol deadline).\nherdr-config  Print a Herdr [ui] configuration snippet; does not change files."
+            "herdr-quota [status|refresh|herdr-config|install|configure] [--cache-dir ABSOLUTE_PATH] [--codex EXECUTABLE]\n\ninstall       Install to ~/.local/bin, merge Herdr config and reload.\nconfigure     Merge Herdr config and reload using this executable.\nManagement options: --config ABSOLUTE_PATH --install-dir ABSOLUTE_PATH --herdr EXECUTABLE\n\nstatus        Print cached quota immediately; refresh in the background if due.\nrefresh       Perform a due refresh in the foreground (15s protocol deadline).\nherdr-config  Print a Herdr [ui] configuration snippet; does not change files."
         ),
         "--version" | "-V" => println!("herdr-quota {}", env!("CARGO_PKG_VERSION")),
         _ => {
