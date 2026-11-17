@@ -46,11 +46,12 @@ args = sys.argv[1:]
 home = pathlib.Path(os.environ['HOME'])
 url = args[-1]
 auth = '-K' in args
+token = os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')
+assert not token or all(token not in a for a in args), 'credentials exposed in argv'
 if auth:
     credentials = pathlib.Path(args[args.index('-K') + 1]).read_text()
     assert os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')
     assert ('Bearer ' + (os.environ.get('GH_TOKEN') or os.environ['GITHUB_TOKEN'])) in credentials
-    assert not any('secret_token' in a or 'preferred_token' in a for a in args)
 with (home / 'requests').open('a') as log:
     log.write(json.dumps({'url':url, 'auth':auth}) + '\\n')
 if (home / 'network-failure').exists(): sys.exit(22)
@@ -173,6 +174,30 @@ if '-w' in args: print('200', end='')
         self.assertTrue(all(not r['auth'] for r in cloud))
         (self.home / 'network-failure').touch()
         self.run_remote(success=False)
+
+    def test_actions_bearer_token_downloads_without_exposure_or_redirect_auth(self):
+        # Synthetic JWT-shaped value includes the full safe bearer-token alphabet.
+        token = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJmaXh0dXJlIn0.signature-with_~+/=='
+        self.env['GITHUB_TOKEN'] = token
+        (self.home / 'redirect').touch()
+        result = self.run_remote()
+        self.assertNotIn(token, result.stdout + result.stderr)
+        self.assertEqual(self.installed.read_bytes(), BINARY.read_bytes())
+        requests = [json.loads(line) for line in (self.home / 'requests').read_text().splitlines()]
+        self.assertTrue(any(r['auth'] for r in requests))
+        cloud = [r for r in requests if 'release-assets.githubusercontent.com' in r['url']]
+        self.assertEqual(len(cloud), 2)
+        self.assertTrue(all(not r['auth'] for r in cloud))
+
+    def test_header_or_curl_config_injection_is_rejected_before_download(self):
+        for token in ('fixture\"', 'fixture\\escape', 'fixture space', 'fixture\nheader = injected', 'fixture\rinjected'):
+            with self.subTest(token_kind=repr(token)):
+                self.env['GH_TOKEN'] = token
+                result = self.run_remote(success=False)
+                self.assertNotIn(token, result.stdout + result.stderr)
+                self.assertFalse((self.home / 'requests').exists())
+                self.assertFalse(self.installed.exists())
+                self.assertEqual(self.config.read_text(), self.original)
 
     def test_unsafe_archive_and_wrong_version_preserve_installed_program(self):
         self.run_remote()
