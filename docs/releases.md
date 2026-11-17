@@ -38,6 +38,15 @@ CI 对两个目标分别运行 Rust 测试、编译、解压后的程序和下�
 GH_TOKEN=... python3 scripts/verify-published.py --tag v0.1.0 --output /tmp/herdr-release-check
 ```
 
-发布验证失败会使 workflow 失败，已经创建的 Release 保留供维护者诊断；不要覆盖同版本资产，修复后递增版本重新发布。仓库尚无实际发布时，只能完成本地及 CI 构建验证，无法声称线上下载已验证。
+发布验证失败会使 workflow 失败，已经创建的 Release 保留供维护者诊断；不要覆盖同版本资产，修复后递增版本重新发布。新版本 tag 发布前只能完成本地、CI 构建与既有 Release 的下载验收，不能声称新版本线上下载已验证。
+
+## 发布清单
+
+以 v0.1.2 为例，维护者在集成分支合入 main 后执行：
+
+1. 确认 main 顶端包含本版本提交：`Cargo.toml` 为 `version = "0.1.2"`，README 一键命令固定 `v0.1.2`，发行说明由 workflow 用 `--generate-notes` 自动生成，无需手工准备。tag push 时 workflow 强校验 tag 与 Cargo 版本一致。
+2. 在 main 顶端打标签并推送：`git tag v0.1.2 && git push origin v0.1.2`。main 已指向新 pin 而 tag 尚未推送的窗口内，README 一键命令会 404；标签推送后即恢复。
+3. 按顺序观察两轮 workflow 运行全绿：`implement/**` 分支 push 运行 `build` 与 `existing-release-lifecycle`（用本提交 bootstrap 对最新已发布 Release 做真实下载验收）；tag push 运行 `build`、`publish`（合并双平台 `SHA256SUMS`、`gh release create --generate-notes`、`verify-published.py` 复检）与 `published-lifecycle`（两平台用真实 Release API 安装、重复安装、卸载）。
+4. 发布后人工复核：`python3 scripts/verify-published.py --tag v0.1.2 --output /tmp/herdr-release-check`（使用已登录的 `gh` 或 `GH_TOKEN`）；再在 Linux 本机匿名执行 README 的安装、卸载一键命令各一次，确认下载、校验、安装与清理链路，并把证据记录回对应 issue。
 
 Runner 架构以 [GitHub 官方 runner 参考](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) 为依据，并由运行时 `uname` 检查，避免 runner 标签变更后误测架构。
