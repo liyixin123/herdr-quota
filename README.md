@@ -30,10 +30,10 @@ Codex 剩余 │ 5h [████░░] 78% ↻2h14m │ 1w [███░░░
 
 ### 一条命令安装、重试或更新
 
-入口脚本固定到 `v0.1.1` tag，程序本身每次选择最新 Release，因此重跑同一命令即可安装、更新或修复未完成的安装：
+入口脚本固定到 `v0.1.2` tag，程序本身每次选择最新 Release，因此重跑同一命令即可安装、更新或修复未完成的安装：
 
 ```sh
-(set +x; umask 077; t=$(mktemp -d) || exit; trap 'rm -rf "$t"' 0; trap 'exit 130' HUP INT TERM; curl -q --fail --silent --show-error --proto '=https' --max-time 120 -o "$t/remote.sh" 'https://raw.githubusercontent.com/liyixin123/herdr-quota/v0.1.1/scripts/remote.sh' && sh "$t/remote.sh" install)
+(set +x; umask 077; t=$(mktemp -d) || exit; trap 'rm -rf "$t"' 0; trap 'exit 130' HUP INT TERM; curl -q --fail --silent --show-error --proto '=https' --max-time 120 -o "$t/remote.sh" 'https://raw.githubusercontent.com/liyixin123/herdr-quota/v0.1.2/scripts/remote.sh' && sh "$t/remote.sh" install)
 ```
 
 成功时程序安装到 `~/.local/bin/herdr-quota`，自动定位 Codex 的绝对路径、验证订阅登录，在修改配置前创建 0600 权限的备份并打印路径，然后重载 Herdr。配置默认使用 `HERDR_CONFIG_PATH`、`$XDG_CONFIG_HOME/herdr/config.toml` 或 `~/.config/herdr/config.toml`。无需将安装目录加入 PATH；配置使用绝对路径。保留已有 tab 栏位置、其他状态项及注释，并开启单 tab 时显示 tab 栏。
