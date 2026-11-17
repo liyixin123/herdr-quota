@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 """After-publication acceptance using the real private bootstrap and release API."""
 import os
+import re
+from urllib.parse import quote
 from pathlib import Path
 import subprocess
 import tempfile
 import tomllib
 
 # This job intentionally does not build a binary. Both script and native manager
-# come from GitHub, using the same pinned bootstrap as the README.
+# come from GitHub. By default the bootstrap is pinned to the release tag;
+# branch CI can verify a fixed bootstrap against an already published native asset.
 tag = os.environ['HERDR_QUOTA_TAG']
+bootstrap_ref = quote(os.environ.get('HERDR_QUOTA_BOOTSTRAP_REF', tag), safe='')
 with tempfile.TemporaryDirectory(prefix='hq-published-') as work:
     home = Path(work)
     tools = home / 'tools'
@@ -35,8 +39,8 @@ done
     config.write_text('# preserved\n[ui]\ntab_bar_position="bottom"\ntab_bar_right=[{type="hostname"}]\n')
     script = home / 'remote.sh'
     token = env.get('GH_TOKEN') or env['GITHUB_TOKEN']
-    assert token.replace('_', '').isalnum(), 'invalid token format'
-    fetched = subprocess.run(['curl', '-q', '-K', '-', '--silent', '--show-error', '--fail', '--proto', '=https', '--max-time', '120', '-H', 'Accept: application/vnd.github.raw+json', '-o', str(script), f'https://api.github.com/repos/liyixin123/herdr-quota/contents/scripts/remote.sh?ref={tag}'], input=f'header = "Authorization: Bearer {token}"\n', text=True, env=env)
+    assert re.fullmatch(r'[A-Za-z0-9._~+/=-]+', token), 'invalid token format'
+    fetched = subprocess.run(['curl', '-q', '-K', '-', '--silent', '--show-error', '--fail', '--proto', '=https', '--max-time', '120', '-H', 'Accept: application/vnd.github.raw+json', '-o', str(script), f'https://api.github.com/repos/liyixin123/herdr-quota/contents/scripts/remote.sh?ref={bootstrap_ref}'], input=f'header = "Authorization: Bearer {token}"\n', text=True, env=env)
     assert fetched.returncode == 0, 'published bootstrap download failed'
     def run(action):
         subprocess.run(['/bin/sh', str(script), action], check=True, env=env, timeout=300)

@@ -30,9 +30,9 @@ repo=liyixin123/herdr-quota
 api=https://api.github.com/repos/$repo
 web=https://github.com/$repo/releases
 token=${GH_TOKEN:-${GITHUB_TOKEN:-}}
-# Credentials never appear in curl argv; restricted token alphabet prevents config injection.
+# Credentials never appear in curl argv; RFC 6750 bearer-token alphabet prevents header/config injection.
 if [ -n "$token" ]; then
-    case "$token" in *[!a-zA-Z0-9_]*) fail 'Invalid GitHub token format; use GH_TOKEN or GITHUB_TOKEN.' ;; esac
+    case "$token" in *[!a-zA-Z0-9._~+/=-]*) fail 'Invalid GitHub token format; use GH_TOKEN or GITHUB_TOKEN.' ;; esac
     command -v jq >/dev/null 2>&1 || fail 'Private downloads require jq; install jq and rerun with GH_TOKEN or GITHUB_TOKEN.'
     printf 'header = "Authorization: Bearer %s"\n' "$token" > "$stage/auth"
     unset token

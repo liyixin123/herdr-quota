@@ -14,7 +14,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 TARGET = 'aarch64-apple-darwin' if sys.platform == 'darwin' else 'x86_64-unknown-linux-musl'
 BINARY = Path(os.environ.get('RELEASE_TEST_BINARY', ROOT / 'target/release/herdr-quota')).resolve()
-TAG = os.environ.get('RELEASE_TAG', 'v0.1.0')
+TAG = os.environ.get('RELEASE_TAG') or 'v' + subprocess.check_output([str(BINARY), '--version'], text=True).strip().split()[1]
 
 class ReleaseTest(unittest.TestCase):
     def cli(self, *args, ok=True):

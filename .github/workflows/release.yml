@@ -144,3 +144,39 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HERDR_QUOTA_TAG: ${{ github.ref_name }}
         run: python3 tests/remote/published.py
+
+  existing-release-lifecycle:
+    # Branch-only proof: use this commit's bootstrap and a previously published
+    # native asset, with the real Actions token, before creating another tag.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/implement/')
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, ubuntu-22.04]
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install private-download prerequisite
+        shell: bash
+        run: |
+          if ! command -v jq >/dev/null; then
+            if [[ "$RUNNER_OS" == macOS ]]; then brew install jq; else sudo apt-get update && sudo apt-get install -y jq; fi
+          fi
+      - name: Select existing published native release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          tag=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
+          echo "HERDR_QUOTA_TAG=$tag" >> "$GITHUB_ENV"
+      - name: Exercise current bootstrap with real Actions authentication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HERDR_QUOTA_BOOTSTRAP_REF: ${{ github.sha }}
+        run: python3 tests/remote/published.py
