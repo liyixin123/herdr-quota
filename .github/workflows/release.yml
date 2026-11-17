@@ -25,6 +25,9 @@ jobs:
       MACOSX_DEPLOYMENT_TARGET: '15.0'
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.89.0'
@@ -68,6 +71,20 @@ jobs:
         run: |
           python3 -m unittest discover -s tests/release
           python3 scripts/release.py package --binary "$RELEASE_TEST_BINARY" --tag "$RELEASE_TAG" --target ${{ matrix.target }} --output dist
+      - name: Ensure jq for private-download regression tests
+        shell: bash
+        run: |
+          if ! command -v jq >/dev/null; then
+            if [[ "$RUNNER_OS" == macOS ]]; then brew install jq; else sudo apt-get update && sudo apt-get install -y jq; fi
+          fi
+      - name: Test remote lifecycle with packaged native versions
+        env:
+          RELEASE_TEST_BINARY: target/${{ matrix.target }}/release/herdr-quota
+          RELEASE_TEST_TARGET: ${{ matrix.target }}
+          PREVIOUS_TEST_BINARY: target/previous/herdr-quota
+        run: |
+          python3 tests/remote/build_previous.py "$PREVIOUS_TEST_BINARY"
+          python3 -m unittest discover -s tests/remote
       - uses: actions/upload-artifact@v4
         with:
           name: package-${{ matrix.target }}
@@ -100,3 +117,30 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/verify-published.py --repo "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME" --output downloaded
+
+  published-lifecycle:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: publish
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, ubuntu-22.04]
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install private-download prerequisite
+        shell: bash
+        run: |
+          if ! command -v jq >/dev/null; then
+            if [[ "$RUNNER_OS" == macOS ]]; then brew install jq; else sudo apt-get update && sudo apt-get install -y jq; fi
+          fi
+      - name: Exercise published bootstrap and native lifecycle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HERDR_QUOTA_TAG: ${{ github.ref_name }}
+        run: python3 tests/remote/published.py

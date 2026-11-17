@@ -2,7 +2,7 @@
 
 个人 Herdr TUI 订阅额度插件，项目暂名 `herdr-quota`。
 
-通过 Herdr 的 `ui.tab_bar_right.command` 显示额度。安装后，将生成的配置片段手动合并到 Herdr 配置即可启用。
+通过 Herdr 的 `ui.tab_bar_right.command` 显示额度。远程安装会自动备份并合并配置、重载本机 Herdr。
 
 ## 首期目标
 
@@ -22,98 +22,67 @@ Codex 剩余 · 5h [████░░] 78% ↻2h14m · 1w [███░░░] 
 
 ## 安装与使用
 
-### 1. 检查前置条件
+支持 **macOS ARM64** 和 **Linux x86_64**。先安装并启动 Herdr，安装 Codex CLI 并执行 `codex login`，使用 ChatGPT 订阅账号登录。本机验证版本为 Herdr 0.9.5、Codex CLI 0.169.0。
 
-需要 macOS / Linux、Git、Rust 1.89+（含 Cargo）、Herdr，以及已登录 ChatGPT 订阅账号的 Codex CLI。本机验证版本为 Herdr 0.9.5、Codex CLI 0.169.0。
+安装工具需要 `sh`、`curl`、`tar`、`uname`、`mktemp`、`awk`、`chmod`、`rm`，以及 `sha256sum` 或 `shasum`。私有仓库下载还需要 `jq`（macOS 可用 `brew install jq`，Debian/Ubuntu 可用 `sudo apt-get install jq`）。普通安装无需 Git、Rust、just、Python 或 gh。
 
-在终端中检查这些命令可用。
+### 一条命令安装、重试或更新
+
+仓库目前为私有。先通过环境变量 `GH_TOKEN` 或 `GITHUB_TOKEN` 提供能读取本仓库的 GitHub token；细粒度 token 需要本仓库的 Contents read 权限。不要把 token 字面值写入下面的命令或提交到文件中。
+
+以下命令需要先发布 `v0.1.0`（尚未发布时会报下载失败）。入口脚本固定到该 tag，程序本身每次选择最新 Release，因此重跑同一命令即可更新或修复未完成的安装：
 
 ```sh
-git --version
-rustc --version
-cargo --version
-herdr --version
-codex --version
-codex login status
+(set +x; umask 077; t=$(mktemp -d) || exit; trap 'rm -rf "$t"' 0; trap 'exit 130' HUP INT TERM; printf 'header = "Authorization: Bearer %s"\n' "${GH_TOKEN:-${GITHUB_TOKEN:-}}" | curl -q -K - --fail --silent --show-error --proto '=https' --max-time 120 -H 'Accept: application/vnd.github.raw+json' -o "$t/remote.sh" 'https://api.github.com/repos/liyixin123/herdr-quota/contents/scripts/remote.sh?ref=v0.1.0' && sh "$t/remote.sh" install)
 ```
 
-若尚未登录，执行 `codex login` 并使用 ChatGPT 订阅账号完成登录。
+成功时程序安装到 `~/.local/bin/herdr-quota`，自动定位 Codex 的绝对路径、验证订阅登录、打印配置备份位置和修改结果，并重载 Herdr。配置默认使用 `HERDR_CONFIG_PATH`、`$XDG_CONFIG_HOME/herdr/config.toml` 或 `~/.config/herdr/config.toml`。无需将安装目录加入 PATH；配置使用绝对路径。保留已有 tab 栏位置、其他状态项及注释，并开启单 tab 时显示 tab 栏。
 
-### 2. 从源码安装
+等待约 5 秒，在 Herdr 的 tab 行右侧应看到 `Codex 剩余` 和 5h / 1w 百分比、重置倒计时。空间不足时 Herdr 会隐藏状态区。状态与当前 pane 是否运行 Codex 无关，只支持本机 server。
+
+同一命令支持重复安装、更新与失败后重试，不会添加重复配置。下载、校验或发行包验证失败时保留现有程序。Herdr 未启动或重载失败时，修复后重跑同一命令；已安装程序和已保存配置会保留用于恢复。配置解析失败不会覆盖原文件。
+
+### 一条命令卸载
 
 ```sh
-git clone https://github.com/liyixin123/herdr-quota.git
-cd herdr-quota
-cargo install --path . --locked --root "$HOME/.local"
-"$HOME/.local/bin/herdr-quota" --version
+(set +x; umask 077; t=$(mktemp -d) || exit; trap 'rm -rf "$t"' 0; trap 'exit 130' HUP INT TERM; printf 'header = "Authorization: Bearer %s"\n' "${GH_TOKEN:-${GITHUB_TOKEN:-}}" | curl -q -K - --fail --silent --show-error --proto '=https' --max-time 120 -H 'Accept: application/vnd.github.raw+json' -o "$t/remote.sh" 'https://api.github.com/repos/liyixin123/herdr-quota/contents/scripts/remote.sh?ref=v0.1.0' && sh "$t/remote.sh" uninstall)
 ```
 
-已有源码时，在仓库根目录执行 `cargo install` 及之后的命令即可。以上安装位置为 `~/.local/bin/herdr-quota`，后续均使用绝对路径。
+卸载同样下载并验证临时清理程序，因此即使已安装程序被手动删除也可清理；不需要 Codex 或登录信息。只移除本程序管理的额度项和安装文件，保留其他配置、备份和额度缓存；不会用旧备份覆盖用户后续修改。失败后修复并重跑，支持重复卸载。详细恢复规则、路径参数见[安装管理](docs/install-management.md)。
 
-如果希望在终端直接运行 `herdr-quota`，将下面这一行加入所用 shell 的配置文件（如 `~/.zshrc` 或 `~/.bashrc`），再重新打开终端。
+### 公开仓库下载
+
+仅当仓库改为公开后，可省略 token 和 jq：
 
 ```sh
-export PATH="$HOME/.local/bin:$PATH"
+(set +x; umask 077; t=$(mktemp -d) || exit; trap 'rm -rf "$t"' 0; trap 'exit 130' HUP INT TERM; curl -q --fail --silent --show-error --proto '=https' --max-time 120 -o "$t/remote.sh" 'https://raw.githubusercontent.com/liyixin123/herdr-quota/v0.1.0/scripts/remote.sh' && sh "$t/remote.sh" install)
 ```
 
-### 3. 读取一次额度
+将末尾的 `install` 换成 `uninstall` 即为公开仓库卸载命令。
 
-先运行 `command -v codex`，取得 Codex 可执行文件的绝对路径。将下面的 `/absolute/path/to/codex` 替换为该路径，例如 macOS Homebrew 安装可能为 `/opt/homebrew/bin/codex`。
+### 本地开发与维护
+
+在源码仓库中准备 Rust 1.89+、just、Herdr 和已登录的 Codex，然后执行：
 
 ```sh
-command -v codex
+just install
+just uninstall
+just check
+```
+
+本地命令编译后复用相同的原生配置管理行为。需要手动复查额度时：
+
+```sh
 "$HOME/.local/bin/herdr-quota" refresh --codex /absolute/path/to/codex
 "$HOME/.local/bin/herdr-quota" status --codex /absolute/path/to/codex
 ```
 
-成功时会输出类似前面的额度示例。`refresh` 在前台执行到期的读取，协议总超时 15 秒；60 秒内重复调用复用缓存。`status` 立即输出缓存，并在到期或窗口重置时启动一次后台读取。初次 `status` 可能显示“读取中”，下一次调用显示读取结果。
-
-`--codex` 默认从 PATH 查找 `codex`。Herdr 的登录 shell PATH 可能不同，接入时建议指定绝对路径。
-
-### 4. 接入 Herdr
-
-使用已安装的程序生成包含其绝对路径的配置片段，同样替换 Codex 路径。
-
-```sh
-"$HOME/.local/bin/herdr-quota" herdr-config --codex /absolute/path/to/codex
-```
-
-打开本机 `~/.config/herdr/config.toml`，将输出字段合并到现有 `[ui]` 表中。使用自定义 Herdr 配置路径时，编辑实际使用的文件。
-
-- 没有 `[ui]` 时，添加整个输出片段。
-- 已有 `[ui]` 时，将字段合并进该表，避免重复声明 `[ui]`。
-- 已有 `tab_bar_right` 时，将生成的 command 项加入原数组，保留其他条目。
-- 设置 `hide_tab_bar_when_single_tab = false` 和 `tab_bar_position = "top"`，以便单 tab 时也显示顶部状态栏。
-
-保存后，在正在使用的本机 Herdr 会话的终端中执行以下命令。
-
-```sh
-herdr server reload-config
-```
-
-等待约 5 秒，检查顶部 tab 行右侧是否出现 `Codex 剩余`。配置生成命令只打印文本，配置合并和重载需要按上述步骤执行。
-
-Herdr 每 5 秒执行一次本地 `status`，网络额度读取仍限每 60 秒一次；倒计时显示到分钟。状态显示与当前 pane 是否运行 Codex 无关，空间不足时 Herdr 会隐藏整个状态区。只支持本机 server。
-
-### 更新与卸载
-
-更新时，在源码仓库中拉取最新代码并重新安装。
-
-```sh
-git pull --ff-only
-cargo install --path . --locked --root "$HOME/.local" --force
-```
-
-安装位置保持相同时，Herdr 下次调用会使用更新后的程序。
-
-卸载时，先从 Herdr 的 `tab_bar_right` 数组中移除对应 command 项，保存并执行 `herdr server reload-config`，然后卸载程序。
-
-```sh
-cargo uninstall --root "$HOME/.local" herdr-quota
-```
+`refresh` 在前台读取，协议总超时 15 秒；60 秒内复用缓存。`status` 立即输出缓存，到期或额度窗口重置后启动后台读取，初次可能显示“读取中”。Herdr 每 5 秒调用一次本地 `status`，网络额度读取仍限每 60 秒一次。`--codex` 默认从 PATH 查找；自动安装会将发现的绝对路径写入配置。
 
 ### 常见问题
 
+- 下载失败时，检查网络、`v0.1.0` 及最新 Release 是否已发布、token 的仓库权限；私有仓库无法匿名下载。SHA256 不符时不要绕过校验，稍后重跑或联系维护者。
+- 不支持的平台需要自行从源码构建；缺少工具时按提示安装后重跑。Herdr 重载失败时先启动本机 Herdr；安装提示失败时不要仅凭文件存在判断完成。
 - 终端显示“未登录”或“非订阅账号”时，执行 `codex login status`，确认 CLI 使用 ChatGPT 订阅账号。
 - 显示“读取失败”时，确认 `--codex` 指向可执行文件，并在终端运行上面的 `refresh` 命令复查。刚尝试过读取时，等待 60 秒后重试。
 - 终端能显示额度、Herdr 中没有显示时，检查配置中的程序路径与 Codex 路径、是否已重载配置，以及 tab 行是否有足够空间。
@@ -133,7 +102,9 @@ cargo uninstall --root "$HOME/.local" herdr-quota
 ## 开发检查
 
 ```sh
-cargo fmt --all -- --check
-cargo test --locked
-cargo clippy --locked --all-targets -- -D warnings
+just check
+# 远程入口回归（开发环境需要 Python 3.11+ 和 jq）
+cargo build --release --locked
+python3 tests/remote/build_previous.py target/previous/herdr-quota
+PREVIOUS_TEST_BINARY=target/previous/herdr-quota python3 -m unittest discover -s tests/remote
 ```
