@@ -61,6 +61,8 @@ Direct HTTP succeeded through the environment HTTPS proxy, returning both 5h/1w 
 
 A live app-server comparison could not be completed: the normal startup exited with read-only filesystem errors in this sandbox. Redirecting sqlite/log directories into a temporary directory still failed to answer initialization within 30 seconds; it was terminated. Therefore live snapshot equivalence and authenticated app-server CPU/memory savings remain **unverified**, and no percentage saving is claimed. No model turn was started and no credentials were copied to temporary directories. An isolated unauthenticated app-server baseline is measured separately below; it is not a paired authenticated quota-query comparison.
 
+The server measurement bounds the complete initialize exchange (including partial output lines) with a Unix interval timer, defaults to 30 seconds, and caps its response read at 1 MiB. A fake server regression verifies timeout after a partial line with a 0.1-second budget.
+
 Unauthenticated baseline from `measure_server.py`, using an empty temporary CODEX_HOME and only initialize/initialized:
 
 - Initialization: 0.2003 seconds.
