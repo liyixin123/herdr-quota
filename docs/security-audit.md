@@ -102,6 +102,7 @@ grep -rnE '/Users/[A-Za-z]+|/home/[a-z]+' --exclude-dir=.git .
 
 1. **Git 历史作者邮箱**（F5）：已公开的 22 个提交携带裸 QQ 号作为作者邮箱；如需彻底移除须改写历史并强制推送，同时会使 v0.1.0/v0.1.1 标签与已发布资产失联，代价显著高于暴露本身（无凭据能力，仅弱身份关联）。建议：维持现状 + 后续提交统一使用 noreply 地址；是否改写由维护者决策。
 2. **未推送本地分支的 Gmail 邮箱提交**：并行工单分支（implement/ticket-6、implement/ticket-10 等）存在使用个人 Gmail 邮箱的新提交，推送前应将仓库 git 配置（`user.email`）切换为 `56808175+liyixin123@users.noreply.github.com` 或对已产生提交改写作者（未推送前改写无代价）。
+   - **处置记录（2026-11-17，集成阶段补录）**：审计与推送并行发生，ticket-6/7/10 分支一度携 Gmail 提交推送到公开远端。已处置：仓库级 git 配置改为 noreply 地址；集成分支 `integrate/public-release` 上 f284c45 之后的全10 个提交用 `git filter-branch --env-filter` 改写为 noreply（改写前后树内容字节一致，`git diff` 为空）；三个工单分支同步改写并强制推送，远端分支引用不再指向 Gmail 提交（旧提交对象在 GitHub 侧待 GC，API 事件/缓存可能短期残留）。后续所有集成提交均使用 noreply 地址。
 3. 本工单新增提交已使用 noreply 地址；建议将全局/仓库默认邮箱一并切换，避免后续工单继续引入。
 4. README/docs 中仍按私有仓库描述 token 安装流程，属工单 #7 范围，本审计未改。
 5. 可选增强（属 #10 范围）：在 CI 中加入 push 前 gitleaks 扫描步骤，防止未来引入凭据。
