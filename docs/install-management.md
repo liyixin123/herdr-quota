@@ -24,3 +24,15 @@ herdr-quota configure
 卸载只移除带有精确后缀 ` # herdr-quota` 的额度状态项，保留其他状态项、注释、tab 栏位置及安装之后的配置修改。不会把整份安装备份覆盖回配置。单 tab 显示设置仍为安装写入的 `false` 时，才恢复记录中的原值或移除原本不存在的键；如果用户改为其他值则保留。原值也是 `false` 或用户后来再次设为 `false` 时无法区分来源，恢复行为以安装记录为准。没有安装记录时仍可清理标记项，但不猜测原先的显示设置。`configure` 直接使用的开发程序不会被删除；状态中的 `installed` 布尔值记录是否安装了程序副本。
 
 配置变更前打印新的卸载备份路径，以 0600 创建；成功保存后先重载 Herdr，最后删除已安装程序和安装记录。解析、读写或重载失败会返回失败，报告剩余操作，并保留程序及安装记录供重试；已经保存的配置清理不回滚。重载失败后只有 `herdr status --json` 明确报告服务未运行时才完成删除，并提示配置清理将在下次启动生效。无法确认服务状态时保留恢复信息，修复后重跑同一卸载命令。卸载不会删除备份或额度缓存。重复卸载及已手动删除程序、配置或状态项均可安全重试。
+
+## 远程发行包入口
+
+普通用户使用 README 的远程命令。`scripts/remote.sh install [原生参数]` 和 `scripts/remote.sh uninstall [原生参数]` 都先下载临时管理程序；不依赖已安装程序存在或支持当前管理接口。shell 不合并配置、不删除安装文件，统一调用经过验证的临时原生程序。原生程序的失败退出码会传递到调用者；成功提示以真实配置保存和 Herdr 重载结果为准。
+
+支持 Darwin ARM64 和 Linux x86_64，发行包名称遵循 `herdr-quota-v<VERSION>-<target>.tar.gz`，使用同一 Release 的 `SHA256SUMS`。公开路径从 latest 校验清单推导版本并固定后续下载；私有路径用 `GH_TOKEN`（优先）或 `GITHUB_TOKEN` 访问 GitHub API，要求 `jq`。token 使用私有临时 curl 配置传入，不进入命令参数或日志；API 不自动跟随重定向，受信任的 GitHub 资产重定向使用独立的无凭据请求。临时目录退出时清理。入口 bootstrap 固定在 `v0.1.0`，而程序默认选择最新 Release；`HERDR_QUOTA_TAG=v<VERSION>` 可固定发行版用于验收。
+
+验证 SHA256 后，先要求 tar 只有根目录下单个普通文件 `herdr-quota`，再解包，核对 `--version` 与 Release tag 一致，最后执行 install/uninstall。下载、校验、归档或版本验证失败都发生在调用原生安装前，不会覆盖现有程序。SHA256 用于检测下载一致性，不是独立的发行者签名。发行源是本仓库的 GitHub Release。
+
+远程回归需要开发环境的 Python 3.11+、Rust 和 jq，不是用户安装前置条件。`tests/remote/build_previous.py` 构建同一原生管理实现的 `0.0.0` 版本夹具，`tests/remote/test_remote.py` 把真实 release 可执行文件打包，并在隔离 HOME/XDG、Codex/Herdr 和传输边界夹具下运行远程命令，验证已有配置、安装、重复、旧版更新、下载/校验失败保留、重试与卸载，也实际执行生成配置中的 shell command 读取额度。
+
+CI 的两个原生 runner 分别运行 macOS ARM64 和 Linux x86_64 musl 包的完整回归；shell 平台模拟不能代替原生执行。tag 发布之后，`published-lifecycle` 在两个平台运行 `tests/remote/published.py`，从固定 tag 的真实 Contents API 获取入口，再通过真实 Release API 下载并安装、重复安装、删除已安装程序后卸载及重复卸载。发布前无法完成实际下载验收；本地回归的 Herdr 重载使用夹具，不代表已验证真实 Herdr UI。发布 job 需要 Contents write，构建和发布后验收仅需 Contents read。
