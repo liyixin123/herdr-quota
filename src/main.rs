@@ -3,6 +3,7 @@ mod codex;
 mod management;
 mod model;
 
+use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -150,8 +151,10 @@ fn status(options: &Options) {
     if current.due(now())
         && let Ok(executable) = std::env::current_exe()
     {
-        // This short-lived child owns its Codex process and a single-flight lock.
+        // Herdr cleans up the status command's process group on success too.
+        // Give the short-lived refresh its own group so it can finish reading.
         let _ = Command::new(executable)
+            .process_group(0)
             .arg("refresh")
             .arg("--cache-dir")
             .arg(&options.cache_dir)

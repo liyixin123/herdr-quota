@@ -1,12 +1,74 @@
 use serde_json::{Value, json};
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
+use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Command, Output};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
+
+#[test]
+fn background_refresh_survives_status_command_group_cleanup() {
+    use std::io::{BufRead, BufReader};
+    use std::process::Stdio;
+    use std::time::{Duration, Instant};
+
+    let f = Fixture::new();
+    let script = fs::read_to_string(&f.server).unwrap();
+    fs::write(
+        &f.server,
+        script.replace("while IFS=", "sleep 0.2\nwhile IFS="),
+    )
+    .unwrap();
+    // Herdr 0.9.5 kills the status command's process group even on success.
+    let mut child = Command::new("/bin/sh")
+        .args([
+            "-c",
+            "\"$1\" status --cache-dir \"$2\" --codex \"$3\"; sleep 30",
+            "sh",
+        ])
+        .arg(env!("CARGO_BIN_EXE_herdr-quota"))
+        .arg(f.dir.join("cache"))
+        .arg(&f.server)
+        .process_group(0)
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut line = String::new();
+    BufReader::new(child.stdout.take().unwrap())
+        .read_line(&mut line)
+        .unwrap();
+    assert!(line.contains("读取中"));
+    assert!(
+        Command::new("/bin/kill")
+            .args(["-KILL", "--", &format!("-{}", child.id())])
+            .status()
+            .unwrap()
+            .success()
+    );
+    child.wait().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(3);
+    loop {
+        if let Ok(data) = fs::read(f.dir.join("cache/quota.json")) {
+            let cache: Value = serde_json::from_slice(&data).unwrap();
+            if cache["state"] == "ready" {
+                break;
+            }
+        }
+        assert!(
+            Instant::now() < deadline,
+            "background refresh was killed; status remains 读取中"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(
+        String::from_utf8(f.run("status").stdout)
+            .unwrap()
+            .contains("72%")
+    );
+}
 
 struct Fixture {
     dir: PathBuf,
