@@ -26,19 +26,17 @@ Codex 剩余 │ 5h [████░░] 78% ↻2h14m │ 1w [███░░░
 
 支持 **macOS 15+ ARM64** 和 **Linux x86_64**（系统基线见[发行说明](docs/releases.md)）。先安装并启动 Herdr，安装 Codex CLI 并执行 `codex login`，使用 ChatGPT 订阅账号登录。本机验证版本为 Herdr 0.9.5、Codex CLI 0.169.0。
 
-安装工具需要 `sh`、`curl`、`tar`、`uname`、`mktemp`、`awk`、`chmod`、`rm`，以及 `sha256sum` 或 `shasum`。私有仓库下载还需要 `jq`（macOS 可用 `brew install jq`，Debian/Ubuntu 可用 `sudo apt-get install jq`）。普通安装无需 Git、Rust、just、Python 或 gh。
+安装命令只需要常见系统工具：`sh`、`curl`、`tar`、`uname`、`mktemp`、`awk`、`chmod`、`rm`，以及 `sha256sum` 或 `shasum`。仓库与发行包均为公开，普通安装无需 Git、Rust、just、Python、gh，也无需 GitHub token 或 `jq`。只有在私有镜像或 fork 上安装时，才需要设置 `GH_TOKEN` 或 `GITHUB_TOKEN`（细粒度 token 需要对应仓库的 Contents read 权限）并安装 `jq` 走认证下载，机制见[安装管理](docs/install-management.md)。
 
 ### 一条命令安装、重试或更新
 
-仓库目前为私有。先通过环境变量 `GH_TOKEN` 或 `GITHUB_TOKEN` 提供能读取本仓库的 GitHub token；细粒度 token 需要本仓库的 Contents read 权限。不要把 token 字面值写入下面的命令或提交到文件中。
-
-以下命令需要先发布 `v0.1.1`（尚未发布时会报下载失败）。入口脚本固定到该 tag，程序本身每次选择最新 Release，因此重跑同一命令即可更新或修复未完成的安装：
+入口脚本固定到 `v0.1.1` tag，程序本身每次选择最新 Release，因此重跑同一命令即可安装、更新或修复未完成的安装：
 
 ```sh
-(set +x; umask 077; t=$(mktemp -d) || exit; trap 'rm -rf "$t"' 0; trap 'exit 130' HUP INT TERM; token=${GH_TOKEN:-${GITHUB_TOKEN:-}}; case "$token" in ''|*[!a-zA-Z0-9._~+/=-]*) echo 'Invalid GitHub token format' >&2; exit 1;; esac; printf 'header = "Authorization: Bearer %s"\n' "$token" | curl -q -K - --fail --silent --show-error --proto '=https' --max-time 120 -H 'Accept: application/vnd.github.raw+json' -o "$t/remote.sh" 'https://api.github.com/repos/liyixin123/herdr-quota/contents/scripts/remote.sh?ref=v0.1.1' && sh "$t/remote.sh" install)
+(set +x; umask 077; t=$(mktemp -d) || exit; trap 'rm -rf "$t"' 0; trap 'exit 130' HUP INT TERM; curl -q --fail --silent --show-error --proto '=https' --max-time 120 -o "$t/remote.sh" 'https://raw.githubusercontent.com/liyixin123/herdr-quota/v0.1.1/scripts/remote.sh' && sh "$t/remote.sh" install)
 ```
 
-成功时程序安装到 `~/.local/bin/herdr-quota`，自动定位 Codex 的绝对路径、验证订阅登录、打印配置备份位置和修改结果，并重载 Herdr。配置默认使用 `HERDR_CONFIG_PATH`、`$XDG_CONFIG_HOME/herdr/config.toml` 或 `~/.config/herdr/config.toml`。无需将安装目录加入 PATH；配置使用绝对路径。保留已有 tab 栏位置、其他状态项及注释，并开启单 tab 时显示 tab 栏。
+成功时程序安装到 `~/.local/bin/herdr-quota`，自动定位 Codex 的绝对路径、验证订阅登录，在修改配置前创建 0600 权限的备份并打印路径，然后重载 Herdr。配置默认使用 `HERDR_CONFIG_PATH`、`$XDG_CONFIG_HOME/herdr/config.toml` 或 `~/.config/herdr/config.toml`。无需将安装目录加入 PATH；配置使用绝对路径。保留已有 tab 栏位置、其他状态项及注释，并开启单 tab 时显示 tab 栏。
 
 等待约 5 秒，在 Herdr 的 tab 行右侧应看到 `Codex 剩余` 和 5h / 1w 百分比、重置倒计时。空间不足时 Herdr 会隐藏状态区。状态与当前 pane 是否运行 Codex 无关，只支持本机 server。
 
@@ -46,21 +44,9 @@ Codex 剩余 │ 5h [████░░] 78% ↻2h14m │ 1w [███░░░
 
 ### 一条命令卸载
 
-```sh
-(set +x; umask 077; t=$(mktemp -d) || exit; trap 'rm -rf "$t"' 0; trap 'exit 130' HUP INT TERM; token=${GH_TOKEN:-${GITHUB_TOKEN:-}}; case "$token" in ''|*[!a-zA-Z0-9._~+/=-]*) echo 'Invalid GitHub token format' >&2; exit 1;; esac; printf 'header = "Authorization: Bearer %s"\n' "$token" | curl -q -K - --fail --silent --show-error --proto '=https' --max-time 120 -H 'Accept: application/vnd.github.raw+json' -o "$t/remote.sh" 'https://api.github.com/repos/liyixin123/herdr-quota/contents/scripts/remote.sh?ref=v0.1.1' && sh "$t/remote.sh" uninstall)
-```
+将上面安装命令末尾的 `install` 换成 `uninstall`，即为卸载命令。
 
 卸载同样下载并验证临时清理程序，因此即使已安装程序被手动删除也可清理；不需要 Codex 或登录信息。只移除本程序管理的额度项和安装文件，保留其他配置、备份和额度缓存；不会用旧备份覆盖用户后续修改。失败后修复并重跑，支持重复卸载。详细恢复规则、路径参数见[安装管理](docs/install-management.md)。
-
-### 公开仓库下载
-
-仅当仓库改为公开后，可省略 token 和 jq：
-
-```sh
-(set +x; umask 077; t=$(mktemp -d) || exit; trap 'rm -rf "$t"' 0; trap 'exit 130' HUP INT TERM; curl -q --fail --silent --show-error --proto '=https' --max-time 120 -o "$t/remote.sh" 'https://raw.githubusercontent.com/liyixin123/herdr-quota/v0.1.1/scripts/remote.sh' && sh "$t/remote.sh" install)
-```
-
-将末尾的 `install` 换成 `uninstall` 即为公开仓库卸载命令。
 
 ### 本地开发与维护
 
@@ -83,7 +69,7 @@ just check
 
 ### 常见问题
 
-- 下载失败时，检查网络、`v0.1.1` 及最新 Release 是否已发布、token 的仓库权限；私有仓库无法匿名下载。SHA256 不符时不要绕过校验，稍后重跑或联系维护者。
+- 下载失败时，检查网络、安装命令中固定的 bootstrap tag 与最新 Release 是否已发布。SHA256 不符时不要绕过校验，稍后重跑或联系维护者。
 - 不支持的平台需要自行从源码构建；缺少工具时按提示安装后重跑。Herdr 重载失败时先启动本机 Herdr；安装提示失败时不要仅凭文件存在判断完成。
 - 终端显示“未登录”或“非订阅账号”时，执行 `codex login status`，确认 CLI 使用 ChatGPT 订阅账号。
 - 显示“读取失败”时，确认 `--codex` 指向可执行文件，并在终端运行上面的 `refresh` 命令复查。刚尝试过读取时，等待 60 秒后重试。
@@ -105,7 +91,7 @@ just check
 
 ```sh
 just check
-# 远程入口回归（开发环境需要 Python 3.11+ 和 jq）
+# 远程入口回归（开发环境需要 Python 3.11+ 和 jq；匿名公开端点回归需要网络）
 cargo build --release --locked
 python3 tests/remote/build_previous.py target/previous/herdr-quota
 PREVIOUS_TEST_BINARY=target/previous/herdr-quota python3 -m unittest discover -s tests/remote

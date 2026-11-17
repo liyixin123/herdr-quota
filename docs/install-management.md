@@ -29,10 +29,10 @@ herdr-quota configure
 
 普通用户使用 README 的远程命令。`scripts/remote.sh install [原生参数]` 和 `scripts/remote.sh uninstall [原生参数]` 都先下载临时管理程序；不依赖已安装程序存在或支持当前管理接口。shell 不合并配置、不删除安装文件，统一调用经过验证的临时原生程序。原生程序的失败退出码会传递到调用者；成功提示以真实配置保存和 Herdr 重载结果为准。
 
-支持 Darwin ARM64 和 Linux x86_64，发行包名称遵循 `herdr-quota-v<VERSION>-<target>.tar.gz`，使用同一 Release 的 `SHA256SUMS`。公开路径从 latest 校验清单推导版本并固定后续下载；私有路径用 `GH_TOKEN`（优先）或 `GITHUB_TOKEN` 访问 GitHub API，要求 `jq`。token 使用私有临时 curl 配置传入，不进入命令参数或日志；API 不自动跟随重定向，受信任的 GitHub 资产重定向使用独立的无凭据请求。临时目录退出时清理。入口 bootstrap 固定在 `v0.1.0`，而程序默认选择最新 Release；`HERDR_QUOTA_TAG=v<VERSION>` 可固定发行版用于验收。
+支持 Darwin ARM64 和 Linux x86_64，发行包名称遵循 `herdr-quota-v<VERSION>-<target>.tar.gz`，使用同一 Release 的 `SHA256SUMS`。公开仓库的匿名路径是默认入口，从 latest 校验清单推导版本并固定后续下载，不需要 token 或 `jq`；私有镜像或 fork 用 `GH_TOKEN`（优先）或 `GITHUB_TOKEN` 访问 GitHub API，要求 `jq`。token 使用私有临时 curl 配置传入，不进入命令参数或日志；API 不自动跟随重定向，受信任的 GitHub 资产重定向使用独立的无凭据请求。临时目录退出时清理。入口 bootstrap 固定在 `v0.1.1`（README 主入口从 raw.githubusercontent.com 匿名获取），而程序默认选择最新 Release；`HERDR_QUOTA_TAG=v<VERSION>` 可固定发行版用于验收。
 
 验证 SHA256 后，先要求 tar 只有根目录下单个普通文件 `herdr-quota`，再解包，核对 `--version` 与 Release tag 一致，最后执行 install/uninstall。下载、校验、归档或版本验证失败都发生在调用原生安装前，不会覆盖现有程序。SHA256 用于检测下载一致性，不是独立的发行者签名。发行源是本仓库的 GitHub Release。
 
-远程回归需要开发环境的 Python 3.11+、Rust 和 jq，不是用户安装前置条件。`tests/remote/build_previous.py` 构建同一原生管理实现的 `0.0.0` 版本夹具，`tests/remote/test_remote.py` 把真实 release 可执行文件打包，并在隔离 HOME/XDG、Codex/Herdr 和传输边界夹具下运行远程命令，验证已有配置、安装、重复、旧版更新、下载/校验失败保留、重试与卸载，也实际执行生成配置中的 shell command 读取额度。
+远程回归需要开发环境的 Python 3.11+、Rust 和 jq（认证路径测试用），以及访问真实公开端点的网络（匿名回归），不是用户安装前置条件。`tests/remote/build_previous.py` 构建同一原生管理实现的 `0.0.0` 版本夹具，`tests/remote/test_remote.py` 把真实 release 可执行文件打包，并在隔离 HOME/XDG、Codex/Herdr 和传输边界夹具下运行远程命令，验证已有配置、安装、重复、旧版更新、下载/校验失败保留、重试与卸载，也实际执行生成配置中的 shell command 读取额度。`tests/remote/test_anonymous.py` 在清除 `GH_TOKEN`/`GITHUB_TOKEN` 的隔离环境下访问真实公开端点：raw 入口脚本、latest `SHA256SUMS` 与发行包，独立校验摘要后覆盖首次安装、重复安装、旧版更新、下载与校验失败保留及重试、手动删除后卸载和重复卸载。
 
-CI 的两个原生 runner 分别运行 macOS ARM64 和 Linux x86_64 musl 包的完整回归；shell 平台模拟不能代替原生执行。tag 发布之后，`published-lifecycle` 在两个平台运行 `tests/remote/published.py`，从固定 tag 的真实 Contents API 获取入口，再通过真实 Release API 下载并安装、重复安装、删除已安装程序后卸载及重复卸载。发布前无法完成实际下载验收；本地回归的 Herdr 重载使用夹具，不代表已验证真实 Herdr UI。发布 job 需要 Contents write，构建和发布后验收仅需 Contents read。
+CI 的两个原生 runner 分别运行 macOS ARM64 和 Linux x86_64 musl 包的完整回归；shell 平台模拟不能代替原生执行。tag 发布之后，`published-lifecycle` 在两个平台运行 `tests/remote/published.py`，从固定 tag 的真实 Contents API 获取入口，再通过真实 Release API 下载并安装、重复安装、删除已安装程序后卸载及重复卸载。发布前只能对最新已发布 Release 完成实际下载验收，新版本本身要等 tag 发布后验收；本地回归的 Herdr 重载使用夹具，不代表已验证真实 Herdr UI。发布 job 需要 Contents write，构建和发布后验收仅需 Contents read。

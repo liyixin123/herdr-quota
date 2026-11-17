@@ -19,7 +19,7 @@ https://github.com/liyixin123/herdr-quota/releases/download/v<VERSION>/herdr-quo
 https://github.com/liyixin123/herdr-quota/releases/download/v<VERSION>/SHA256SUMS
 ```
 
-仓库当前为私有仓库。这些地址需要有仓库读取权限的 GitHub 登录会话；匿名下载可能返回 404。维护者的发布验证使用 `GH_TOKEN` 和 GitHub Release asset API 下载同名资产。安装入口需要提供相应的认证下载方式，不应承诺匿名 `curl` 可访问私有发行包。
+仓库为公开仓库，以上地址可匿名下载。维护者的发布验证仍使用 `GH_TOKEN` 和 GitHub Release asset API 下载同名资产；私有镜像或 fork 的下载需要对应仓库的读取权限。
 
 下载后先校验再解压执行。例如 Linux 使用 `sha256sum --check SHA256SUMS --ignore-missing`；macOS 使用 `shasum -a 256` 对照清单中的对应文件摘要。校验信息用于发现下载损坏，下载资产和清单必须来自可信的同一个 Release。
 
