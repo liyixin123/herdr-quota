@@ -4,6 +4,7 @@ version = "0.1.1"
 edition = "2024"
 rust-version = "1.89"
 description = "Local Codex subscription quota for the Herdr tab bar"
+license = "MIT"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

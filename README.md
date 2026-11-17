@@ -110,3 +110,7 @@ cargo build --release --locked
 python3 tests/remote/build_previous.py target/previous/herdr-quota
 PREVIOUS_TEST_BINARY=target/previous/herdr-quota python3 -m unittest discover -s tests/remote
 ```
+
+## 开源许可证
+
+本项目以 [MIT 许可证](LICENSE)开源，预编译发行包同样按 MIT 分发；第三方依赖的许可清单见[许可证与第三方声明](docs/license-notices.md)。
