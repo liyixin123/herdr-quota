@@ -68,15 +68,17 @@ Python 自建 PTY 的先行尝试没有建立 API socket；最初还遇到 macOS
 
 ### 实际 Rust 输出与 Unicode 补验
 
-同日另建隔离会话 `herdr-quota-real-test`，配置与会话状态位于 `/tmp/hq-real-check`，使用实际发布二进制 `/Users/liyixin/repos/rust/herdr-quota/target/release/herdr-quota`。状态 command 的参数为 `status --cache-dir /tmp/hq-real-check/cache --codex /opt/homebrew/bin/codex`，`interval_seconds = 5`、`timeout_seconds = 2`。在 180/181 列 × 40 行下切换到新 workspace，确认实际程序的中文未知态以及 Unicode 条形额度态均位于顶部 tab 行。
+同日另建隔离会话 `herdr-quota-real-test`，配置与会话状态位于 `/tmp/hq-real-check`，使用实际发布二进制 `<仓库检出目录>/target/release/herdr-quota`。状态 command 的参数为 `status --cache-dir /tmp/hq-real-check/cache --codex /opt/homebrew/bin/codex`，`interval_seconds = 5`、`timeout_seconds = 2`。在 180/181 列 × 40 行下切换到新 workspace，确认实际程序的中文未知态以及 Unicode 条形额度态均位于顶部 tab 行。
 
 测试缓存的两次初始 refresh 返回 `account_unknown`；与此独立，主实现验证在正常环境用 release 二进制和相同 Codex 路径成功取得额度。隔离测试使用了临时 XDG 配置环境，可能影响 Codex 登录存储解析；本次未诊断其原因，不能据此认定主程序读取不稳定，也没有将未知态伪装成有效额度。
 
-为避免重复请求，额度态补验采用主实现成功读取的规范化缓存副本，**属于缓存回放，不是本隔离会话的实时获取**。副本仅将 `attempted_at` / `fetched_at` 调整为当前时间，额度与重置时间保持原值，没有输出身份摘要或认证信息。实际顶部行捕获为：
+为避免重复请求，额度态补验采用主实现成功读取的规范化缓存副本，**属于缓存回放，不是本隔离会话的实时获取**。副本仅将 `attempted_at` / `fetched_at` 调整为当前时间，没有输出身份摘要或认证信息；原回放中的真实额度与重置时间数值已按敏感信息审计（见 [security-audit.md](security-audit.md)）替换为脱敏示意值。实际顶部行格式捕获为：
 
 ```text
-Codex 剩余 · 5h [█████░] 96% ↻4h55m · 1w [█░░░░░] 30% ↻3h22m
+Codex 剩余 · 5h [█████░] 78% ↻2h41m · 1w [█░░░░░] 47% ↻3d05h
 ```
+
+（上行为格式示意，数值为脱敏后的非真实读数，条形宽度与排版与原验收一致。）
 
 完整文本在同一 tab 行，无可见的换行、重叠或截断；ANSI 重绘的行定位均为第 1 行，pane 的 `sh-3.2$` 位于第 2 行。该检查基于终端输出与光标定位，未做字体像素截图验收。证据：`/tmp/hq-real-check/ui-replay-evidence.json`。随时间推移还观察到分钟倒计时变化和“过期”标记；没有由此声称网络刷新成功。测试会话的 stop / delete 均成功，未覆盖用户配置或操作当前会话。
 

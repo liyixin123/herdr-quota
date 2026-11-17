@@ -11,7 +11,7 @@
 - 首期跟随本机 Codex CLI 当前登录账号，不提供独立登录或账号选择。
 - 展示两个窗口各自的重置倒计时，优先采用进度条样式。
 - 开发语言暂定 Rust。
-- 项目目录：`/Users/liyixin/repos/rust/herdr-quota`。
+- 项目目录：本仓库 `herdr-quota`。
 - 首期只支持本机 Herdr server，读取同一机器上的 Codex 当前登录账号；不支持远程 server。
 - 使用单行状态区显示；空间足够时跨 workspace、tab、pane 可见，接受窄屏时 Herdr 整体隐藏状态区。
 
