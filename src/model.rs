@@ -59,7 +59,7 @@ impl Cache {
                 State::AccountUnknown | State::RefreshFailed => "读取失败",
                 _ => "读取中",
             };
-            return format!("Codex 剩余 · 5h 未知 · 1w 未知 · {state}");
+            return format!("Codex 剩余 │ 5h 未知 │ 1w 未知 │ [{state}]");
         };
         let expired = [&quota.five_hour, &quota.weekly]
             .iter()
@@ -70,15 +70,15 @@ impl Cache {
                 .is_none_or(|at| now < at || now.saturating_sub(at) >= REFRESH_SECONDS)
             || expired;
         let mut text = format!(
-            "Codex 剩余 · 5h {} · 1w {}",
+            "Codex 剩余 │ 5h {} │ 1w {}",
             render_window(&quota.five_hour, now),
             render_window(&quota.weekly, now)
         );
         if stale {
-            text.push_str(" · 过期");
+            text.push_str(" │ [过期]");
         }
         if quota.usage_allowed == Some(false) {
-            text.push_str(" · 暂不可用");
+            text.push_str(" │ [暂不可用]");
         }
         text
     }
