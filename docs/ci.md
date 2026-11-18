@@ -4,9 +4,9 @@
 
 ## 工作流
 
-### ci.yml（Continuous checks，本票新增）
+### ci.yml（Continuous checks）
 
-- 触发：`push` 到 `main`、所有 `pull_request`、`workflow_dispatch`。
+- 触发：`push` 到 `main`、`workflow_dispatch`。
 - 顶层权限：`permissions: contents: read`，无 job 级提权。
 - 三个 job 完整镜像 `just check`，均运行在 `ubuntu-22.04`，工具链固定 `dtolnay/rust-toolchain@stable` + `toolchain: '1.89.0'`（与 release.yml、`Cargo.toml` 的 `rust-version = "1.89"` 一致）：
 
@@ -38,7 +38,6 @@
 1. `deletion`：禁止删除 main。
 2. `non_fast_forward`：禁止强推（force push）main。
 3. `required_status_checks`（非严格策略），必需检查全部为**实测存在**的名称：
-   - `fmt`、`test`、`clippy`（ci.yml job id；命令已在本地 Rust 1.89.0 上逐条验证通过，见验证证据）
    - `build (macos-15, aarch64-apple-darwin)`、`build (ubuntu-22.04, x86_64-unknown-linux-musl)`（release.yml，名称取自分支实际 check-run）
 
 选择说明：
@@ -78,9 +77,6 @@ gh api -X POST repos/liyixin123/herdr-quota/rulesets --input - <<'EOF'
      "parameters": {
        "strict_required_status_checks_policy": false,
        "required_status_checks": [
-         {"context": "fmt"},
-         {"context": "test"},
-         {"context": "clippy"},
          {"context": "build (macos-15, aarch64-apple-darwin)"},
          {"context": "build (ubuntu-22.04, x86_64-unknown-linux-musl)"}
        ]
@@ -95,9 +91,9 @@ gh api -X PATCH repos/liyixin123/herdr-quota --input - <<'EOF'
 EOF
 ```
 
-方式二（网页端）：Settings → Rules → Rulesets → New ruleset → New branch ruleset：name `main branch protection`、Enforcement Active、Targets 选 `Target branches: refs/heads/main`，勾选 Require a pull request before merging 之外的三项：Restrict deletions、Block force pushes、Require status checks to pass（添加上表 5 个名称）；随后 Settings → Code security and analysis 开启 Dependabot security updates、Dependabot alerts、Secret scanning、Push protection。
+方式二（网页端）：Settings → Rules → Rulesets → New ruleset → New branch ruleset：name `main branch protection`、Enforcement Active、Targets 选 `Target branches: refs/heads/main`，勾选 Require a pull request before merging 之外的三项：Restrict deletions、Block force pushes、Require status checks to pass（添加两个 Release packages 构建检查）；随后 Settings → Code security and analysis 开启 Dependabot security updates、Dependabot alerts、Secret scanning、Push protection。
 
-验证：`gh api repos/liyixin123/herdr-quota/rulesets`（应出现 active 的规则集）与 `gh api repos/liyixin123/herdr-quota/rules/branches/main`（应列出 deletion、non_fast_forward、required_status_checks 及 5 个 context）。
+验证：`gh api repos/liyixin123/herdr-quota/rulesets`（应出现 active 的规则集）与 `gh api repos/liyixin123/herdr-quota/rules/branches/main`（应列出 deletion、non_fast_forward、required_status_checks 及两个构建检查）。
 
 ## 依赖更新与安全扫描
 
@@ -123,7 +119,7 @@ EOF
 ## 平台限制与待办
 
 1. **分支保护与安全扫描需维护者凭据启用**：细粒度 PAT 无法调用这些端点（403 表）。按手册执行后，用上面的验证命令记录生效证据。
-2. **外部 fork PR 检查流程无法端到端验证**：需要第二个账号提 fork PR；本仓库无第二个账号可用。已知事实：ci.yml 与 release.yml 都监听全部 `pull_request`，对同仓分支与 fork PR 触发一致；两者顶层均为 `contents: read`、不使用 secret，fork PR 的只读令牌足以运行所有检查（release.yml 的构建矩阵、发布后验收不依赖写权限或 secret）。合入 main 后首个真实 PR（含 fork PR）可补全此验证。
+2. **外部 fork PR 检查流程无法端到端验证**：需要第二个账号提 fork PR；本仓库无第二个账号可用。Release packages 监听所有 `pull_request`，同仓分支和 fork PR 都可运行双平台构建。构建使用只读令牌。
 3. **ci.yml 在线首跑**：合入 main 的那次推送会触发 `fmt`/`test`/`clippy` 首次在线运行；本地 1.89.0 已逐条验证同命令，风险仅剩 runner 环境差异（低）。
 4. **dependabot 版本更新**在 `.github/dependabot.yml` 合入 main 后生效；安全更新（automated security fixes）待维护者按手册启用。
 5. 直接推送到 main 不受必需状态检查约束（GitHub 平台行为：其只约束 PR 合并）；main 上检查失败靠推送后可见的红叉与后续治理兜底，发版流程（#8 的标签机制）不受影响。
