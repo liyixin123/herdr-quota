@@ -1,5 +1,4 @@
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::process::{Child, ChildStdin, Command, Stdio};
@@ -128,8 +127,8 @@ impl Codex {
                     account.get("workspaceName"),
                     account.get("planType")
                 ]);
-                let digest = Sha256::digest(serde_json::to_vec(&metadata).map_err(|_| ())?);
-                Ok(Account::Chatgpt(format!("{digest:x}")))
+                let bytes = serde_json::to_vec(&metadata).map_err(|_| ())?;
+                Ok(Account::Chatgpt(crate::sha256_hex(&bytes)))
             }
             Some(_) => Ok(Account::Unsupported),
             _ => Err(()),
