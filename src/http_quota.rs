@@ -175,10 +175,8 @@ impl Candidate {
                 return Err(());
             }
         }
-        let identity = format!(
-            "http:{:x}",
-            Sha256::digest(serde_json::to_vec(&json!([account, user])).map_err(|_| ())?)
-        );
+        let identity_bytes = serde_json::to_vec(&json!([account, user])).map_err(|_| ())?;
+        let identity = format!("http:{}", crate::sha256_hex(&identity_bytes));
         Ok(Self {
             home: home.into(),
             fingerprint: Sha256::digest(&bytes).to_vec(),
